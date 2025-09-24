@@ -49,7 +49,7 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 	var words = stripped_text.split(" ", false)
 	
 	if words.size() < 2:
-		if words.is_empty() or not namespace_classes.has(words[0]):
+		if words.is_empty() or not namespace_classes.has(words[0]) and current_line_text.find(".") == -1:
 			for _class in namespace_classes.keys():
 				text_ed.add_code_completion_option(CodeEdit.KIND_CONSTANT, _class, _class, Color.WHITE, icon)
 			

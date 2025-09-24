@@ -9,14 +9,10 @@ var editor_console:EditorConsole
 
 func _get_plugin_name() -> String:
 	return "Namespace"
-#func _get_plugin_icon() -> Texture2D:
-	#return EditorInterface.get_base_control().get_theme_icon("Node", &"EditorIcons")
-#func _has_main_screen() -> bool:
-	#return true
 
 func _enable_plugin() -> void:
 	NamespaceBuilder.set_generated_dir_default()
-	pass
+	SyntaxHighlighting.set_default_settings()
 
 func _disable_plugin() -> void:
 	pass
@@ -30,6 +26,7 @@ func _enter_tree() -> void:
 	editor_console.register_temp_scope(scope_data)
 	
 	CodeCompletion.connect_signal()
+	SyntaxHighlighting.set_colors()
 	
 	SyntaxPlus.call_on_ready(_register_syntax_data)
 
@@ -47,3 +44,8 @@ func _register_syntax_data():
 
 func _unregister_syntax_data():
 	SyntaxPlus.unregister_highlight_callable("namespace")
+
+func _set_default_highlight_colors():
+	
+	
+	pass

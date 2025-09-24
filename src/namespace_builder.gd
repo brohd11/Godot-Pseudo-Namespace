@@ -69,7 +69,6 @@ func _run() -> void:
 	build_files()
 
 static func build_files():
-	
 	var generated_dir = GENERATED_DIR
 	var settings = _get_setting_singleton()
 	if not settings.has_setting(GEN_DIR_PROJECT_SETTING):
@@ -81,13 +80,8 @@ static func build_files():
 	if not handled:
 		return
 	
-	var namespace_references = _get_used_namespace_references()
-	for path in namespace_references.keys():
-		print(path)
-		for ref in namespace_references.get(path, []):
-			print("\t", ref)
-	return
 	print("Starting namespace file generation...")
+	var namespace_references = _get_used_namespace_references()
 	
 	var namespace_data = _scan_and_parse_namespaces()
 	if namespace_data is bool:
@@ -98,6 +92,10 @@ static func build_files():
 		print("No namespace tags found. Nothing to generate.")
 		return
 	
+	var valid = await _compare_namespace_data(namespace_references, namespace_data)
+	if not valid:
+		print("Aborting namespace generation.")
+		return
 	
 	_clear_directory(generated_dir)
 	
@@ -109,6 +107,7 @@ static func build_files():
 	if Engine.is_editor_hint():
 		EditorInterface.get_resource_filesystem().scan()
 
+
 static func _get_used_namespace_references():
 	var namespace_dir = get_generated_dir()
 	var namespace_references = {}
@@ -117,7 +116,7 @@ static func _get_used_namespace_references():
 		return namespace_references
 	
 	var class_names_pattern = "|".join(namespace_classes.keys())
-	var pattern = "\\b" + class_names_pattern + "(?:\\.\\w+)*"
+	var pattern = "\\b((?:" + class_names_pattern + ")(?:\\.\\w+)*)\\b"
 	var _namespace_regex = RegEx.new()
 	_namespace_regex.compile(pattern)
 	
@@ -128,22 +127,66 @@ static func _get_used_namespace_references():
 		if file_path.begins_with(namespace_dir):
 			continue
 		var file_access = FileAccess.open(file_path, FileAccess.READ)
-		var file_path_array = []
+		var file_path_data = {}
+		var count = 1
 		while not file_access.eof_reached():
 			var line = file_access.get_line()
-			URegex.string_safe_regex_sub(line, _get_ns_ref.bind(_namespace_regex, file_path_array), string_regex)
+			var anon = func(_line):
+				var _matches = _namespace_regex.search_all(_line)
+				for _match in _matches:
+					if line.begins_with("#! namespace"):
+						continue
+					file_path_data[_match.get_string()] = count
+				return _line
+			
+			URegex.string_safe_regex_read(line, anon, string_regex)
+			count += 1
 		
-		if not file_path_array.is_empty():
-			namespace_references[file_path] = file_path_array
+		if not file_path_data.is_empty():
+			namespace_references[file_path] = file_path_data
 	
 	return namespace_references
 
-static func _get_ns_ref(line:String, _namespace_regex:RegEx, file_path_array:Array):
-	var _matches = _namespace_regex.search_all(line)
-	for _match in _matches:
-		if line.begins_with("#! namespace"):
-			continue
-		file_path_array.append(_match.get_string())
+static func _compare_namespace_data(namespace_references, namespace_data):
+	for path in namespace_references.keys():
+		var ref_data = namespace_references[path]
+		for ref:String in ref_data.keys():
+			var parts = ref.split(".", false)
+			var new_data = namespace_data
+			var valid_ref = true
+			for part in parts:
+				if new_data is not Dictionary: # trying to go too deep
+					valid_ref = false
+					break
+				if new_data.has(part):
+					new_data = new_data[part]
+				else:
+					valid_ref = false
+					break
+			if valid_ref:
+				ref_data.erase(ref)
+		
+		if ref_data.is_empty():
+			namespace_references.erase(path)
+		else:
+			namespace_references[path] = ref_data
+	
+	
+	if not namespace_references.is_empty():
+		printerr("Broken namespace references:")
+		for path in namespace_references.keys():
+			var data = namespace_references.get(path)
+			print_rich("[color=fe786b]%s[/color]" % path)
+			for ref in data.keys():
+				print("\tReference at line %s: %s" % [data.get(ref), ref])
+		
+		
+		var conf = ConfirmationDialogHandler.new("Some references will be broken by\nnew namespace generated.\nProceed?")
+		var handled = await conf.handled
+		if not handled:
+			return false
+	
+	return true
 
 
 static func _get_open_scripts(): # TODO MOVE this somewhere handy?
@@ -165,20 +208,9 @@ static func _get_all_files(namespace_data, file_array, first_level=true):
 
 
 static func _clear_directory(path: String):
-	if not DirAccess.dir_exists_absolute(path):
-		return
+	UFile.recursive_delete_in_dir(path)
 	
-	var dir_arrays = UFile.scan_for_dirs(path, true)
-	for array in dir_arrays:
-		array.reverse()
-		for dir in array:
-			var files = DirAccess.get_files_at(dir)
-			for f in files:
-				var file_path = dir.path_join(f)
-				DirAccess.remove_absolute(file_path)
-			DirAccess.remove_absolute(dir)
-	
-	#
+	## DELETE ONLY TOP LEVEL
 	#var dir = DirAccess.open(path)
 	#if not dir:
 		#print("Generated directory does not exist, creating it: ", path)
@@ -204,23 +236,14 @@ static func _scan_and_parse_namespaces() -> Variant:
 		open_scripts_dict[path] = script
 	var open_script_paths = open_scripts_dict.keys()
 	for file_path in all_files:
-		var lines = []
-		if file_path in open_script_paths:
-			var script = open_scripts_dict.get(file_path) as Script
-			var text = script.source_code
-			lines = text.split("\n")
-		else:
-			var file = FileAccess.open(file_path, FileAccess.READ)
-			if not file:
-				printerr("Could not open file: ", file_path)
-				continue
-			for i in range(lines_to_check):
-				lines.append(file.get_line())
-			file.close()
 		
+		var file = FileAccess.open(file_path, FileAccess.READ)
+		if not file:
+			printerr("Could not open file: ", file_path)
+			continue
 		
-		for i in range(lines.size() - 1):
-			var line = lines[i]
+		for i in range(lines_to_check):
+			var line = file.get_line()
 			if line.begins_with(NAMESPACE_TAG):
 				var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
 				if not namespace_string.is_empty():
@@ -228,45 +251,77 @@ static func _scan_and_parse_namespaces() -> Variant:
 					if not success:
 						return false
 				break
+		
+		file.close()
 	
 	return data
+	
+	
+	## USING SCRIPT EDITORS - THINK NOT NEEDED
+	#var lines_to_check = 10
+	#var data = {}
+	#var all_files = UFile.scan_for_files(_RES, ["gd"])
+	#var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
+	#var open_scripts_dict = {}
+	#for script in open_scripts:
+		#var path = script.resource_path
+		#open_scripts_dict[path] = script
+	#var open_script_paths = open_scripts_dict.keys()
+	#for file_path in all_files:
+		#var lines = []
+		#if file_path in open_script_paths:
+			#var script = open_scripts_dict.get(file_path) as Script
+			#var text = script.source_code
+			#lines = text.split("\n")
+		#else:
+			#var file = FileAccess.open(file_path, FileAccess.READ)
+			#if not file:
+				#printerr("Could not open file: ", file_path)
+				#continue
+			#for i in range(lines_to_check):
+				#lines.append(file.get_line())
+			#file.close()
+		#
+		#
+		#for i in range(lines.size() - 1):
+			#var line = lines[i]
+			#if line.begins_with(NAMESPACE_TAG):
+				#var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
+				#if not namespace_string.is_empty():
+					#var success = _add_to_namespace_data(data, namespace_string, file_path)
+					#if not success:
+						#return false
+				#break
+	#
+	#return data
 
 
+#region MULTI FILE NAMESPACE
 
 
 # Main entry point. Iterates through the top-level keys in the data.
 static func _generate_namespace_file_with_dir(data: Dictionary, generated_dir: String):
-	# Ensure the base directory exists.
 	DirAccess.make_dir_recursive_absolute(generated_dir)
-
 	for top_level_class_name in data.keys():
 		var sub_data = data[top_level_class_name]
-		# Start the recursive generation process for each top-level entry.
 		_generate_class_and_subclasses(top_level_class_name, sub_data, generated_dir, generated_dir)
 
 
-
-# Recursive function to generate a class file and all its sub-classes.
 static func _generate_class_and_subclasses(_class_name: String, data: Dictionary, parent_dir_path: String, generated_dir):
-	# 1. Define paths for the current class
 	var file_name = _class_name.to_snake_case() + ".gd"
 	var file_path = parent_dir_path.path_join(file_name)
 	
-	# Subclasses will be placed in a directory named after the current class.
 	var child_dir_path = parent_dir_path.path_join(_class_name.to_snake_case())
-
-	# 2. Prepare the content for the current class file
+	
 	var file_content = "# This file is auto-generated. Do not edit.\n\n"
 	if parent_dir_path == generated_dir:
 		file_content += "class_name %s\n\n" % _class_name # "" <- parser
-
-	# Sort keys for consistent file output
+	
 	var sorted_keys = data.keys()
 	sorted_keys.sort()
-
+	
 	var has_subclasses = false
-
-	# 3. Generate constants (preloads) for all children
+	
 	for key in sorted_keys:
 		var value = data[key]
 		
@@ -279,7 +334,11 @@ static func _generate_class_and_subclasses(_class_name: String, data: Dictionary
 		elif value is String: # This is a final constant (e.g., a scene path)
 			file_content += _get_preload(key, value)
 	
-	# 4. Write the current class file to disk
+	if FileAccess.file_exists(file_path):
+		var trimmed_path = file_path.trim_prefix(generated_dir).trim_prefix("/")
+		var message = "Namespace collision, ensure consistent case style as file names are converted to snake_case: %s | %s"
+		printerr(message % [_class_name, trimmed_path])
+	
 	var file = FileAccess.open(file_path, FileAccess.WRITE)
 	if file:
 		file.store_string(file_content)
@@ -288,18 +347,17 @@ static func _generate_class_and_subclasses(_class_name: String, data: Dictionary
 		printerr("Failed to write to file: ", file_path)
 		return # Stop if we can't write the parent file
 
-	# 5. If there were any subclasses, create their directory and recurse
+	# subclasses, create their directory and recurse
 	if has_subclasses:
 		DirAccess.make_dir_recursive_absolute(child_dir_path)
 		for key in sorted_keys:
 			var value = data[key]
 			if value is Dictionary:
-				# Recursive call for the sub-class
 				_generate_class_and_subclasses(key, value, child_dir_path, generated_dir)
+#endregion
 
 
-
-## SINGLE FILE NAMESPACE
+#region SINGLE FILE NAMESPACE
 
 static func _generate_namespace_files(data: Dictionary, generated_dir):
 	for top_level_namespace in data.keys():
@@ -338,7 +396,8 @@ static func _generate_class_content(data: Dictionary, indent_level: int) -> Stri
 			content += indent + _get_preload(key, value)
 	
 	return content
-### /
+
+#endregion
 
 static func _add_to_namespace_data(data: Dictionary, namespace_string: String, file_path: String):
 	var parts = namespace_string.split(".")
@@ -366,7 +425,7 @@ static func _add_to_namespace_data(data: Dictionary, namespace_string: String, f
 static func _get_preload(name, path):
 	var uid = UFile.path_to_uid(path)
 	return 'const %s = preload("%s") # %s\n' % [name, uid, path] # "" <- parser
-	pass
+
 
 static func get_namespace_classes() -> Dictionary:
 	var namespace_dir = NamespaceBuilder.GENERATED_DIR
