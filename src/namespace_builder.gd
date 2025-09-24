@@ -3,6 +3,9 @@ class_name NamespaceBuilder
 extends EditorScript
 #! remote
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_file.gd")
+const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_regex.gd")
+const ConfirmationDialogHandler = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/dialog/confirmation/confirmation_dialog_handler.gd")
+
 
 const _RES = "res://" 
 const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
@@ -10,8 +13,9 @@ const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
 const GENERATED_DIR = "res://namespace_classes/" #! ignore-remote
 const NAMESPACE_TAG = "#! namespace "
 
-static func parse(commands, args, editor_console:EditorConsole):
-	print(commands)
+static var _open_scripts
+
+static func parse(commands, args, editor_console):
 	if commands.size() == 1:
 		return
 	var c_2 = commands[1]
@@ -33,78 +37,269 @@ static func get_completion(raw_text, commands, args, editor_console):
 	#print('%s, %s, %s, %s' % [raw_text, commands, args, editor_console])
 	return complete_data
 
+
+static func _get_setting_singleton(): ## Editor Settings for now. Possibly need to use ProjectSettings.save()
+	return ProjectSettings
+	#return EditorInterface.get_editor_settings()
+
+static func set_generated_dir_default():
+	if _get_setting_singleton().has_setting(GEN_DIR_PROJECT_SETTING):
+		return
+	_get_setting_singleton().set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
+	if _get_setting_singleton() == ProjectSettings:
+		ProjectSettings.save()
+
 static func set_generated_dir(new_dir:String):
 	if not new_dir.begins_with(_RES):
 		new_dir = _RES.path_join(new_dir)
 		print("Making path absolute: %s" % new_dir)
 	
-	ProjectSettings.set_setting(GEN_DIR_PROJECT_SETTING, new_dir)
+	_get_setting_singleton().set_setting(GEN_DIR_PROJECT_SETTING, new_dir)
+	if _get_setting_singleton() == ProjectSettings:
+		ProjectSettings.save()
 
+static func get_generated_dir():
+	var generated_dir = GENERATED_DIR
+	var settings = _get_setting_singleton()
+	if settings.has_setting(GEN_DIR_PROJECT_SETTING):
+		generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
+	return generated_dir
 
 func _run() -> void:
 	build_files()
 
 static func build_files():
+	
 	var generated_dir = GENERATED_DIR
-	if not ProjectSettings.has_setting(GEN_DIR_PROJECT_SETTING):
-		ProjectSettings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
+	var settings = _get_setting_singleton()
+	if not settings.has_setting(GEN_DIR_PROJECT_SETTING):
+		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
 	
-	generated_dir = ProjectSettings.get_setting(GEN_DIR_PROJECT_SETTING)
+	generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
+	var conf = ConfirmationDialogHandler.new("Ensure all files are saved before running build.")
+	var handled = await conf.handled
+	if not handled:
+		return
 	
+	var namespace_references = _get_used_namespace_references()
+	for path in namespace_references.keys():
+		print(path)
+		for ref in namespace_references.get(path, []):
+			print("\t", ref)
+	return
 	print("Starting namespace file generation...")
 	
-	_clear_directory(generated_dir)
-	
 	var namespace_data = _scan_and_parse_namespaces()
+	if namespace_data is bool:
+		print("Aborting, fix namespace collisions.")
+		return
+	
 	if namespace_data.is_empty():
 		print("No namespace tags found. Nothing to generate.")
 		return
 	
-	_generate_namespace_files(namespace_data, generated_dir)
+	
+	_clear_directory(generated_dir)
+	
+	#_generate_namespace_files(namespace_data, generated_dir)
+	_generate_namespace_file_with_dir(namespace_data, generated_dir)
 	
 	print("Namespace file generation complete.")
+	
 	if Engine.is_editor_hint():
 		EditorInterface.get_resource_filesystem().scan()
 
+static func _get_used_namespace_references():
+	var namespace_dir = get_generated_dir()
+	var namespace_references = {}
+	var namespace_classes = get_namespace_classes()
+	if namespace_classes.is_empty():
+		return namespace_references
+	
+	var class_names_pattern = "|".join(namespace_classes.keys())
+	var pattern = "\\b" + class_names_pattern + "(?:\\.\\w+)*"
+	var _namespace_regex = RegEx.new()
+	_namespace_regex.compile(pattern)
+	
+	var string_regex = URegex.get_strings()
+	
+	var files = UFile.scan_for_files(_RES, ["gd"])
+	for file_path in files:
+		if file_path.begins_with(namespace_dir):
+			continue
+		var file_access = FileAccess.open(file_path, FileAccess.READ)
+		var file_path_array = []
+		while not file_access.eof_reached():
+			var line = file_access.get_line()
+			URegex.string_safe_regex_sub(line, _get_ns_ref.bind(_namespace_regex, file_path_array), string_regex)
+		
+		if not file_path_array.is_empty():
+			namespace_references[file_path] = file_path_array
+	
+	return namespace_references
+
+static func _get_ns_ref(line:String, _namespace_regex:RegEx, file_path_array:Array):
+	var _matches = _namespace_regex.search_all(line)
+	for _match in _matches:
+		if line.begins_with("#! namespace"):
+			continue
+		file_path_array.append(_match.get_string())
+
+
+static func _get_open_scripts(): # TODO MOVE this somewhere handy?
+	var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
+	var open_scripts_dict = {}
+	for script in open_scripts:
+		var path = script.resource_path
+		open_scripts_dict[path] = script
+	
+	return open_scripts_dict
+
+static func _get_all_files(namespace_data, file_array, first_level=true):
+	for key in namespace_data.keys():
+		var value = namespace_data.get(key)
+		if value is Dictionary:
+			_get_all_files(value, file_array, true)
+		elif value is String:
+			file_array.append(value)
+
 
 static func _clear_directory(path: String):
-	var dir = DirAccess.open(path)
-	if not dir:
-		print("Generated directory does not exist, creating it: ", path)
-		DirAccess.make_dir_recursive_absolute(path)
+	if not DirAccess.dir_exists_absolute(path):
 		return
+	
+	var dir_arrays = UFile.scan_for_dirs(path, true)
+	for array in dir_arrays:
+		array.reverse()
+		for dir in array:
+			var files = DirAccess.get_files_at(dir)
+			for f in files:
+				var file_path = dir.path_join(f)
+				DirAccess.remove_absolute(file_path)
+			DirAccess.remove_absolute(dir)
+	
+	#
+	#var dir = DirAccess.open(path)
+	#if not dir:
+		#print("Generated directory does not exist, creating it: ", path)
+		#DirAccess.make_dir_recursive_absolute(path)
+		#return
+#
+	#for file_name in dir.get_files():
+		#if file_name.ends_with(".gd"):
+			#var err = dir.remove(file_name)
+			#if err != OK:
+				#printerr("Failed to remove old file: ", path.path_join(file_name))
 
-	for file_name in dir.get_files():
-		if file_name.ends_with(".gd"):
-			var err = dir.remove(file_name)
-			if err != OK:
-				printerr("Failed to remove old file: ", path.path_join(file_name))
 
 
-static func _scan_and_parse_namespaces() -> Dictionary:
+static func _scan_and_parse_namespaces() -> Variant:
+	var lines_to_check = 10
 	var data = {}
 	var all_files = UFile.scan_for_files(_RES, ["gd"])
-	
+	var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
+	var open_scripts_dict = {}
+	for script in open_scripts:
+		var path = script.resource_path
+		open_scripts_dict[path] = script
+	var open_script_paths = open_scripts_dict.keys()
 	for file_path in all_files:
-		var file = FileAccess.open(file_path, FileAccess.READ)
-		if not file:
-			printerr("Could not open file: ", file_path)
-			continue
+		var lines = []
+		if file_path in open_script_paths:
+			var script = open_scripts_dict.get(file_path) as Script
+			var text = script.source_code
+			lines = text.split("\n")
+		else:
+			var file = FileAccess.open(file_path, FileAccess.READ)
+			if not file:
+				printerr("Could not open file: ", file_path)
+				continue
+			for i in range(lines_to_check):
+				lines.append(file.get_line())
+			file.close()
 		
-		var count = 0
-		while not file.eof_reached() and count < 10:
-			var line = file.get_line()
+		
+		for i in range(lines.size() - 1):
+			var line = lines[i]
 			if line.begins_with(NAMESPACE_TAG):
 				var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
 				if not namespace_string.is_empty():
-					_add_to_namespace_data(data, namespace_string, file_path)
+					var success = _add_to_namespace_data(data, namespace_string, file_path)
+					if not success:
+						return false
 				break
-			count += 1
-		
-		file.close()
-		
+	
 	return data
 
+
+
+
+# Main entry point. Iterates through the top-level keys in the data.
+static func _generate_namespace_file_with_dir(data: Dictionary, generated_dir: String):
+	# Ensure the base directory exists.
+	DirAccess.make_dir_recursive_absolute(generated_dir)
+
+	for top_level_class_name in data.keys():
+		var sub_data = data[top_level_class_name]
+		# Start the recursive generation process for each top-level entry.
+		_generate_class_and_subclasses(top_level_class_name, sub_data, generated_dir, generated_dir)
+
+
+
+# Recursive function to generate a class file and all its sub-classes.
+static func _generate_class_and_subclasses(_class_name: String, data: Dictionary, parent_dir_path: String, generated_dir):
+	# 1. Define paths for the current class
+	var file_name = _class_name.to_snake_case() + ".gd"
+	var file_path = parent_dir_path.path_join(file_name)
+	
+	# Subclasses will be placed in a directory named after the current class.
+	var child_dir_path = parent_dir_path.path_join(_class_name.to_snake_case())
+
+	# 2. Prepare the content for the current class file
+	var file_content = "# This file is auto-generated. Do not edit.\n\n"
+	if parent_dir_path == generated_dir:
+		file_content += "class_name %s\n\n" % _class_name # "" <- parser
+
+	# Sort keys for consistent file output
+	var sorted_keys = data.keys()
+	sorted_keys.sort()
+
+	var has_subclasses = false
+
+	# 3. Generate constants (preloads) for all children
+	for key in sorted_keys:
+		var value = data[key]
+		
+		if value is Dictionary: # This will be a nested class in its own file
+			has_subclasses = true
+			var sub_class_file_name = key.to_snake_case() + ".gd"
+			var sub_class_path = child_dir_path.path_join(sub_class_file_name)
+			file_content += _get_preload(key, sub_class_path)
+			
+		elif value is String: # This is a final constant (e.g., a scene path)
+			file_content += _get_preload(key, value)
+	
+	# 4. Write the current class file to disk
+	var file = FileAccess.open(file_path, FileAccess.WRITE)
+	if file:
+		file.store_string(file_content)
+		file.close()
+	else:
+		printerr("Failed to write to file: ", file_path)
+		return # Stop if we can't write the parent file
+
+	# 5. If there were any subclasses, create their directory and recurse
+	if has_subclasses:
+		DirAccess.make_dir_recursive_absolute(child_dir_path)
+		for key in sorted_keys:
+			var value = data[key]
+			if value is Dictionary:
+				# Recursive call for the sub-class
+				_generate_class_and_subclasses(key, value, child_dir_path, generated_dir)
+
+
+
+## SINGLE FILE NAMESPACE
 
 static func _generate_namespace_files(data: Dictionary, generated_dir):
 	for top_level_namespace in data.keys():
@@ -112,7 +307,6 @@ static func _generate_namespace_files(data: Dictionary, generated_dir):
 		file_content += "class_name %s\n\n" % top_level_namespace
 		
 		var sub_data = data[top_level_namespace]
-		# Start recursive generation with an indent level of 1.
 		file_content += _generate_class_content(sub_data, 0)
 		
 		var file_name = top_level_namespace.to_snake_case() + ".gd"
@@ -124,28 +318,6 @@ static func _generate_namespace_files(data: Dictionary, generated_dir):
 			file.close()
 		else:
 			printerr("Failed to write to file: ", target_path)
-
-
-static func _add_to_namespace_data(data: Dictionary, namespace_string: String, file_path: String):
-	var parts = namespace_string.split(".")
-	var current_level = data
-
-	for i in range(parts.size()):
-		var part = parts[i]
-		if not part.is_valid_ascii_identifier():
-			print("Invalid identifier: %s" % part)
-			return
-		if i == parts.size() - 1: # This is the last part (the class name)
-			if current_level.has(part):
-				printerr("Namespace collision! '%s' already exists. Overwriting." % namespace_string)
-			current_level[part] = file_path
-		else: # This is a namespace or inner class
-			if not current_level.has(part):
-				current_level[part] = {}
-			elif not current_level[part] is Dictionary:
-				printerr("Namespace conflict! '%s' is defined as both a class and a namespace." % part)
-				return # Abort this entry
-			current_level = current_level[part]
 
 
 static func _generate_class_content(data: Dictionary, indent_level: int) -> String:
@@ -163,16 +335,44 @@ static func _generate_class_content(data: Dictionary, indent_level: int) -> Stri
 			content += indent + "class %s:\n" % key # "" <- parser
 			content += _generate_class_content(value, indent_level + 1)
 		elif value is String: # It's a final constant
-			content += indent + 'const %s = preload("%s")\n' % [key, value] # "" <- parser
+			content += indent + _get_preload(key, value)
 	
 	return content
+### /
+
+static func _add_to_namespace_data(data: Dictionary, namespace_string: String, file_path: String):
+	var parts = namespace_string.split(".")
+	var current_level = data
+
+	for i in range(parts.size()):
+		var part = parts[i]
+		if not part.is_valid_ascii_identifier():
+			print("Invalid identifier: %s" % part)
+			return false
+		if i == parts.size() - 1: # This is the last part (the class name)
+			if current_level.has(part):
+				printerr("Namespace collision! '%s' already exists. Overwriting." % namespace_string)
+			current_level[part] = file_path
+		else: # This is a namespace or inner class
+			if not current_level.has(part):
+				current_level[part] = {}
+			elif not current_level[part] is Dictionary:
+				printerr("Namespace conflict! '%s' is defined as both a class and a namespace." % part)
+				return false # Abort this entry
+			current_level = current_level[part]
+	return true
 
 
-static func get_namespace_classes():
+static func _get_preload(name, path):
+	var uid = UFile.path_to_uid(path)
+	return 'const %s = preload("%s") # %s\n' % [name, uid, path] # "" <- parser
+	pass
+
+static func get_namespace_classes() -> Dictionary:
 	var namespace_dir = NamespaceBuilder.GENERATED_DIR
-	
-	if ProjectSettings.has_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING):
-		namespace_dir = ProjectSettings.get_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING)
+	var settings = _get_setting_singleton()
+	if settings.has_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING):
+		namespace_dir = settings.get_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING)
 	
 	var namespace_files = []
 	if DirAccess.dir_exists_absolute(namespace_dir):

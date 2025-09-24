@@ -15,6 +15,7 @@ func _get_plugin_name() -> String:
 	#return true
 
 func _enable_plugin() -> void:
+	NamespaceBuilder.set_generated_dir_default()
 	pass
 
 func _disable_plugin() -> void:
