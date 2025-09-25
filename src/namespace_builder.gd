@@ -430,7 +430,7 @@ static func _get_preload(name, path):
 	return 'const %s = preload("%s") # %s\n' % [name, uid, path] # "" <- parser
 
 static func get_namespace_string_parts(original_line_text:String, clean_parts:=true):
-	print(original_line_text)
+	
 	var stripped_text = original_line_text.trim_prefix("#! namespace").strip_edges() # "" <- parser
 	
 	var namespace_string = stripped_text
@@ -439,19 +439,19 @@ static func get_namespace_string_parts(original_line_text:String, clean_parts:=t
 		namespace_string = stripped_text.get_slice(" class", 0).strip_edges() # "" <- parser
 	
 	var parts = namespace_string.split(".", false)
-	print(parts)
+	
 	if class_idx > -1:
 		var class_string = stripped_text.get_slice(" class", 1).strip_edges() # "" <- parser
 		if class_string != "":
 			parts.append(class_string)
-	print(parts)
+	
 	if clean_parts:
 		for i in range(parts.size()):
 			var part = parts[i]
 			if part.find(" ") > -1:
 				part = part.get_slice(" ", 0)
 				parts[i] = part
-	print(parts)
+	
 	return parts
 
 

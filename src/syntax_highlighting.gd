@@ -70,7 +70,7 @@ static func get_namespace_hl_info(current_line_text):
 		var word = words[i]
 		if namespace_script:
 			namespace_script = NamespaceBuilder.class_name_in_script(word, namespace_script)
-		print(word)
+		
 		var idx = stripped_text.find(word, last_idx)
 		if idx == -1:
 			if word.find(".") > -1:
@@ -81,14 +81,8 @@ static func get_namespace_hl_info(current_line_text):
 					if key > first_idx:
 						new_hl_info.erase(key)
 				return new_hl_info
-			#elif word.find(" ") > -1:
-				#return new_hl_info
-			
-			pass
 		
 		last_idx = idx + word.length() - 1
-		print(last_idx)
-		print(idx)
 		
 		if namespace_script != null:
 			if namespace_script.resource_path.begins_with(namespace_dir): # existing namespace member
