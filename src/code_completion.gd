@@ -18,11 +18,6 @@ static func _on_editor_script_changed(script):
 			last_code_edit.code_completion_requested.connect(_on_code_completion_requested)
 
 
-static func _class_name_in_script(word, script):
-	var const_map = script.get_script_constant_map()
-	if const_map.has(word):
-		return const_map.get(word)
-
 static func _on_code_completion_requested():
 	var text_ed = EditorInterface.get_script_editor().get_current_editor().get_base_editor()
 	await text_ed.get_tree().process_frame
@@ -45,8 +40,8 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 	var namespace_classes = NamespaceBuilder.get_namespace_classes()
 	var icon = _get_icon("Script")
 	
-	var stripped_text:String = current_line_text.get_slice("#! namespace", 1).replace(".", " ").strip_edges()
-	var words = stripped_text.split(" ", false)
+	#var words = stripped_text.split(" ", false)
+	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	
 	if words.size() < 2:
 		if words.is_empty() or not namespace_classes.has(words[0]) and current_line_text.find(".") == -1:
@@ -57,7 +52,7 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 			text_ed.update_code_completion_options(false)
 			return
 	
-	_get_namespace_code_completions(text_ed, stripped_text, true)
+	_get_namespace_code_completions(text_ed, current_line_text, true)
 	
 	## Use above to display scripts which are not valid
 	#
@@ -74,17 +69,17 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 
 
 static func _get_extended_class(text_ed:CodeEdit, current_line_text:String):
-	var stripped_text:String = current_line_text.get_slice("extends ", 1).replace(".", " ").strip_edges() # "" <- parser
+	var stripped_text:String = current_line_text.get_slice("extends ", 1).strip_edges() # "" <- parser
 	
 	_get_namespace_code_completions(text_ed, stripped_text)
 
 static func _assignment(text_ed:CodeEdit, current_line_text:String):
-	var stripped_text:String = current_line_text.get_slice("=", 1).replace(".", " ").strip_edges() # "" <- parser
+	var stripped_text:String = current_line_text.get_slice("=", 1).strip_edges() # "" <- parser
 	
 	_get_namespace_code_completions(text_ed, stripped_text)
 
-static func _get_namespace_code_completions(text_ed, stripped_text, show_scripts = true):
-	var words = stripped_text.split(" ", false)
+static func _get_namespace_code_completions(text_ed, current_line_text, show_scripts = true):
+	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text, false)
 	if words.size() == 0:
 		return
 	
@@ -93,7 +88,7 @@ static func _get_namespace_code_completions(text_ed, stripped_text, show_scripts
 	var namespace_classes = NamespaceBuilder.get_namespace_classes()
 	if not namespace_classes.has(first_word):
 		return
-	#text_ed.cancel_code_completion()
+	
 	var namespace_path = namespace_classes.get(first_word)
 	var had_valid = _check_scripts(text_ed, namespace_path, words, show_scripts)
 	if had_valid:
@@ -110,18 +105,23 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 	var idx = 0
 	var current_script: Script = namespace_script
 	for word in words:
-		var next_script = _class_name_in_script(word, current_script)
+		var next_script = NamespaceBuilder.class_name_in_script(word, current_script)
 		idx += 1
+		print('WORD ',word)
 		if next_script:
 			if not show_external and not next_script.resource_path.begins_with(namespace_dir):
 				break # if not showing external, don't list options from external
 			
 			current_script = next_script
 		else:
+			var forbidden = [" ", "."]
+			for f in forbidden:
+				if f in word:
+					return
 			break
 	if idx < words.size() - 1:
 		return
-	
+	print(current_script)
 	var constants = current_script.get_script_constant_map()
 	#print("Final Script: ", current_script.resource_path)
 	#print("Found Constants: ", constants.keys())

@@ -47,8 +47,9 @@ static func get_namespace_hl_info(current_line_text):
 	
 	var stripped_text:String = current_line_text.get_slice("#!", 1).replace(".", " ").strip_edges()
 	var new_hl_info = SyntaxPlus.get_single_line_highlight(stripped_text)
-	var words = stripped_text.split(" ")
-	words.remove_at(0) # remove namespace
+	#var words = stripped_text.split(" ")
+	#words.remove_at(0) # remove namespace
+	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 1: 
 		return new_hl_info
 	var namespace_class = words[0]
@@ -68,10 +69,27 @@ static func get_namespace_hl_info(current_line_text):
 	for i in range(words.size()):
 		var word = words[i]
 		if namespace_script:
-			namespace_script = SyntaxPlus.class_name_in_script(word, namespace_script)
-		
+			namespace_script = NamespaceBuilder.class_name_in_script(word, namespace_script)
+		print(word)
 		var idx = stripped_text.find(word, last_idx)
+		if idx == -1:
+			if word.find(".") > -1:
+				var first_part = word.get_slice(".", 0)
+				var first_idx = stripped_text.find(first_part, last_idx)
+				_set_hl_info_at_idx(new_hl_info, first_idx, word, color_clash)
+				for key in new_hl_info.keys():
+					if key > first_idx:
+						new_hl_info.erase(key)
+				return new_hl_info
+			#elif word.find(" ") > -1:
+				#return new_hl_info
+			
+			pass
+		
 		last_idx = idx + word.length() - 1
+		print(last_idx)
+		print(idx)
+		
 		if namespace_script != null:
 			if namespace_script.resource_path.begins_with(namespace_dir): # existing namespace member
 				_set_hl_info_at_idx(new_hl_info, idx, word, color_existing)
@@ -97,11 +115,11 @@ static func _new_namespace_highlighting(current_line_text:String, hl_info:Dictio
 	return hl_info
 
 static func _set_hl_info_at_idx(hl_info, idx, word, color, force:=false):
-	hl_info[idx + word.length()] = {"color": SyntaxPlus.symbol_color}
+	hl_info[idx + word.length()] = {"color": SyntaxPlus.get_instance().symbol_color}
 	var color_data = hl_info.get(idx)
 	if color_data and not force:
 		var existing_color = color_data.get("color")
-		if existing_color != SyntaxPlus.default_text_color:
+		if existing_color != SyntaxPlus.get_instance().default_text_color:
 			hl_info[idx] = {"color": color_built_in_clash}
 			return
 	

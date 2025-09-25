@@ -247,7 +247,8 @@ static func _scan_and_parse_namespaces() -> Variant:
 			if line.begins_with(NAMESPACE_TAG):
 				var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
 				if not namespace_string.is_empty():
-					var success = _add_to_namespace_data(data, namespace_string, file_path)
+					var success = _add_to_namespace_data(data, line, file_path)
+					#var success = _add_to_namespace_data(data, namespace_string, file_path)
 					if not success:
 						return false
 				break
@@ -399,10 +400,12 @@ static func _generate_class_content(data: Dictionary, indent_level: int) -> Stri
 
 #endregion
 
-static func _add_to_namespace_data(data: Dictionary, namespace_string: String, file_path: String):
-	var parts = namespace_string.split(".")
+static func _add_to_namespace_data(data: Dictionary, current_line_text: String, file_path: String):
+	#var parts = namespace_string.split(".")
+	var parts = get_namespace_string_parts(current_line_text)
+	
 	var current_level = data
-
+	
 	for i in range(parts.size()):
 		var part = parts[i]
 		if not part.is_valid_ascii_identifier():
@@ -410,7 +413,7 @@ static func _add_to_namespace_data(data: Dictionary, namespace_string: String, f
 			return false
 		if i == parts.size() - 1: # This is the last part (the class name)
 			if current_level.has(part):
-				printerr("Namespace collision! '%s' already exists. Overwriting." % namespace_string)
+				printerr("Namespace collision! '%s' already exists. Overwriting." % current_line_text)
 			current_level[part] = file_path
 		else: # This is a namespace or inner class
 			if not current_level.has(part):
@@ -425,6 +428,31 @@ static func _add_to_namespace_data(data: Dictionary, namespace_string: String, f
 static func _get_preload(name, path):
 	var uid = UFile.path_to_uid(path)
 	return 'const %s = preload("%s") # %s\n' % [name, uid, path] # "" <- parser
+
+static func get_namespace_string_parts(original_line_text:String, clean_parts:=true):
+	print(original_line_text)
+	var stripped_text = original_line_text.trim_prefix("#! namespace").strip_edges() # "" <- parser
+	
+	var namespace_string = stripped_text
+	var class_idx = stripped_text.find(" class") # "" <- parser
+	if class_idx > -1:
+		namespace_string = stripped_text.get_slice(" class", 0).strip_edges() # "" <- parser
+	
+	var parts = namespace_string.split(".", false)
+	print(parts)
+	if class_idx > -1:
+		var class_string = stripped_text.get_slice(" class", 1).strip_edges() # "" <- parser
+		if class_string != "":
+			parts.append(class_string)
+	print(parts)
+	if clean_parts:
+		for i in range(parts.size()):
+			var part = parts[i]
+			if part.find(" ") > -1:
+				part = part.get_slice(" ", 0)
+				parts[i] = part
+	print(parts)
+	return parts
 
 
 static func get_namespace_classes() -> Dictionary:
@@ -450,3 +478,8 @@ static func get_namespace_classes() -> Dictionary:
 			valid_global_classes[name] = path
 	
 	return valid_global_classes
+
+static func class_name_in_script(word, script):
+	var const_map = script.get_script_constant_map()
+	if const_map.has(word):
+		return const_map.get(word)
