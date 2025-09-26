@@ -107,7 +107,6 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 	for word in words:
 		var next_script = NamespaceBuilder.class_name_in_script(word, current_script)
 		idx += 1
-		print('WORD ',word)
 		if next_script:
 			if not show_external and not next_script.resource_path.begins_with(namespace_dir):
 				break # if not showing external, don't list options from external
@@ -121,7 +120,7 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 			break
 	if idx < words.size() - 1:
 		return
-	print(current_script)
+	
 	var constants = current_script.get_script_constant_map()
 	#print("Final Script: ", current_script.resource_path)
 	#print("Found Constants: ", constants.keys())

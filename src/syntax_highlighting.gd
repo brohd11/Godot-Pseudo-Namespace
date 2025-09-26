@@ -85,7 +85,7 @@ static func get_namespace_hl_info(current_line_text):
 		last_idx = idx + word.length() - 1
 		
 		if namespace_script != null:
-			if namespace_script.resource_path.begins_with(namespace_dir): # existing namespace member
+			if namespace_script.resource_path.begins_with(namespace_dir) and i < words.size() - 1: # existing namespace member
 				_set_hl_info_at_idx(new_hl_info, idx, word, color_existing)
 			else:
 				var current_script = EditorInterface.get_script_editor().get_current_script().resource_path
@@ -109,7 +109,8 @@ static func _new_namespace_highlighting(current_line_text:String, hl_info:Dictio
 	return hl_info
 
 static func _set_hl_info_at_idx(hl_info, idx, word, color, force:=false):
-	hl_info[idx + word.length()] = {"color": SyntaxPlus.get_instance().symbol_color}
+	var symbol_color = SyntaxPlus.get_instance().symbol_color
+	hl_info[idx + word.length()] = {"color": symbol_color}
 	var color_data = hl_info.get(idx)
 	if color_data and not force:
 		var existing_color = color_data.get("color")
