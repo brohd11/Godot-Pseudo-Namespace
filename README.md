@@ -12,7 +12,7 @@ This is an example of how the syntax highlighter will interact with the namespac
 
 ### How to Use
 
-First off, be sure to save all files before running the build.
+First off, be sure to save all files before running the build. I have had a bug where scripts that were moved from one namespace to another were unlinked in the script editor and needed to be reloaded. I believe this is solved now, however, I still recommend saving all open scripts beforehand.
 
 You can create a namespace by writing a tag near the top of your script (within the top 10 lines).
 "#!" must proceed the declaration.
@@ -36,6 +36,12 @@ Inside, it will have the script preloaded to provide access to the class:
 `const ThisClass = preload("uid_for_this_class")`
 
 The files generated use UIDs to preload the class, so they are resilient to moving around files.
+
+On the left of the image below is the top level "ALib" this is my namespace from the example at the beginning, on the right is the "Runtime" level that is preloaded in the namespace.
+
+<img width="2138" height="564" alt="NamespaceGeneratedFile" src="https://github.com/user-attachments/assets/d6fd2392-f6b3-4285-9d90-ac8292e20731" />
+
+Note: the one green file is one that still has a global class defined, this is not from this plugin.
 
 You can do as many sub classes as you want:
 
@@ -66,6 +72,11 @@ Once you have your initial scripts setup, you can set the location for your gene
 
 `namespace set-dir -- my/dir`
 
+The console can be found in the output tab:
+
+<img width="1026" height="284" alt="NamespaceEditorConsoleedit" src="https://github.com/user-attachments/assets/692597fb-8110-495a-b4f5-bd683e124aec" />
+
+
 "res://" will be added to the front if you use a relative path. This directory will be completely erased everytime you run the build, so don't place anything inside, or make changes you need preserved.
 
 Now you can run the build process by either running the EditorScript "namespace_builder.gd",
@@ -75,7 +86,7 @@ or from the console:
 
 If there are existing namespace files it will parse the existing files and all scripts in your projects to check if your new configuration will break any references. It will list them any conflicts and you can decide whether to proceed or not, before the existing files are deleted and regenerated.
 
-When accessing the namespace class, there is a code completion plugin that will activate. It will give better results than the standard autocomplete when extending and assigning variables. If you have existing namespace files, it will also display members when declaring a namespace.
+When accessing the namespace class, there is a code completion plugin that will activate. It will get rid of the inherited refcounted members and show only the declared members. If you have existing namespace files, it will also display members when declaring a namespace. It will show the object icon if the member is a generated file, and a script icon if the member is from outside of the generation directory.
 
 Because you access this as a global class, you could move these files wherever needed without issues. For example into a plugin for a release package. You would move the top level namespace file needed and the folder of the same name.
 
