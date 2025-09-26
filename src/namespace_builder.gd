@@ -22,18 +22,23 @@ static func parse(commands, args, editor_console):
 	if c_2 == "build":
 		build_files()
 		return
+	elif c_2 == "dir":
+		print(NamespaceBuilder.get_generated_dir())
+		return
 	elif c_2 == "set-dir":
 		if not args.size() == 1:
 			printerr("Expected 1 arg for set-dir command.")
 			return
 		set_generated_dir(args[0])
-	
+
 
 static func get_completion(raw_text, commands, args, editor_console):
 	var complete_data = {}
 	if commands.size() == 1:
 		complete_data["build"] = {}
+		complete_data["dir"] = {}
 		complete_data["set-dir"] = {"METADATA_KEY": {"add_args":true}}
+	
 	#print('%s, %s, %s, %s' % [raw_text, commands, args, editor_console])
 	return complete_data
 
