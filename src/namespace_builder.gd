@@ -94,6 +94,9 @@ static func build_files():
 		return
 	
 	if namespace_data.is_empty():
+		_clear_directory(generated_dir)
+		_clean_up_uids(generated_dir)
+		EditorInterface.get_resource_filesystem().scan()
 		print("No namespace tags found. Nothing to generate.")
 		return
 	
@@ -108,9 +111,8 @@ static func build_files():
 	_generate_namespace_file_with_dir(namespace_data, generated_dir)
 	
 	print("Namespace file generation complete.")
-	
-	if Engine.is_editor_hint():
-		EditorInterface.get_resource_filesystem().scan()
+	_clean_up_uids(generated_dir)
+	EditorInterface.get_resource_filesystem().scan()
 
 
 static func _get_used_namespace_references():
@@ -212,22 +214,79 @@ static func _get_all_files(namespace_data, file_array, first_level=true):
 			file_array.append(value)
 
 
-static func _clear_directory(path: String):
-	UFile.recursive_delete_in_dir(path)
+static func _clear_directory(directory: String):
+	var dir_arrays = UFile.scan_for_dirs(directory, true)
+	for array in dir_arrays:
+		array.reverse()
+		for dir in array:
+			var dir_access = DirAccess.open(dir)
+			var files = dir_access.get_files()
+			for f in files:
+				if f.get_extension() == "uid":
+					continue
+				var file_path = dir.path_join(f)
+				DirAccess.remove_absolute(file_path)
+	
+	if not DirAccess.dir_exists_absolute(directory):
+		return
+	var dir_access = DirAccess.open(directory)
+	var files = dir_access.get_files()
+	for file in files:
+		if file.get_extension() == "uid":
+			continue
+		var file_path = directory.path_join(file)
+		DirAccess.remove_absolute(file_path)
+	
+	
+	#UFile.recursive_delete_in_dir(directory)
 	
 	## DELETE ONLY TOP LEVEL
-	#var dir = DirAccess.open(path)
+	#var dir = DirAccess.open(directory)
 	#if not dir:
-		#print("Generated directory does not exist, creating it: ", path)
-		#DirAccess.make_dir_recursive_absolute(path)
+		#print("Generated directory does not exist, creating it: ", directory)
+		#DirAccess.make_dir_recursive_absolute(directory)
 		#return
 #
 	#for file_name in dir.get_files():
 		#if file_name.ends_with(".gd"):
 			#var err = dir.remove(file_name)
 			#if err != OK:
-				#printerr("Failed to remove old file: ", path.path_join(file_name))
+				#printerr("Failed to remove old file: ", directory.path_join(file_name))
 
+
+static func _clean_up_uids(directory: String):
+	var dir_arrays = UFile.scan_for_dirs(directory, true)
+	for array in dir_arrays:
+		array.reverse()
+		for dir in array:
+			var dir_access = DirAccess.open(dir)
+			var files = dir_access.get_files()
+			for f in files:
+				if f.get_extension() != "uid":
+					continue
+				var file_path = dir.path_join(f)
+				if FileAccess.file_exists(file_path.get_basename()):
+					continue
+				DirAccess.remove_absolute(file_path)
+			
+			files = dir_access.get_files()
+			if files.is_empty():
+				DirAccess.remove_absolute(dir)
+		
+	var dir_access = DirAccess.open(directory)
+	var files = dir_access.get_files()
+	for file in files:
+		if file.get_extension() != "uid":
+			continue
+		var file_path = directory.path_join(file)
+		if FileAccess.file_exists(file_path.get_basename()):
+			continue
+		DirAccess.remove_absolute(file_path)
+	
+	#var gd_files = UFile.scan_for_files(directory, ["gd"])
+	#for path in gd_files:
+		#var file_access = FileAccess.open(path, FileAccess.READ)
+		#while not 
 
 
 static func _scan_and_parse_namespaces() -> Variant:
@@ -261,49 +320,9 @@ static func _scan_and_parse_namespaces() -> Variant:
 		file.close()
 	
 	return data
-	
-	
-	## USING SCRIPT EDITORS - THINK NOT NEEDED
-	#var lines_to_check = 10
-	#var data = {}
-	#var all_files = UFile.scan_for_files(_RES, ["gd"])
-	#var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
-	#var open_scripts_dict = {}
-	#for script in open_scripts:
-		#var path = script.resource_path
-		#open_scripts_dict[path] = script
-	#var open_script_paths = open_scripts_dict.keys()
-	#for file_path in all_files:
-		#var lines = []
-		#if file_path in open_script_paths:
-			#var script = open_scripts_dict.get(file_path) as Script
-			#var text = script.source_code
-			#lines = text.split("\n")
-		#else:
-			#var file = FileAccess.open(file_path, FileAccess.READ)
-			#if not file:
-				#printerr("Could not open file: ", file_path)
-				#continue
-			#for i in range(lines_to_check):
-				#lines.append(file.get_line())
-			#file.close()
-		#
-		#
-		#for i in range(lines.size() - 1):
-			#var line = lines[i]
-			#if line.begins_with(NAMESPACE_TAG):
-				#var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
-				#if not namespace_string.is_empty():
-					#var success = _add_to_namespace_data(data, namespace_string, file_path)
-					#if not success:
-						#return false
-				#break
-	#
-	#return data
 
 
 #region MULTI FILE NAMESPACE
-
 
 # Main entry point. Iterates through the top-level keys in the data.
 static func _generate_namespace_file_with_dir(data: Dictionary, generated_dir: String):
@@ -335,6 +354,19 @@ static func _generate_class_and_subclasses(_class_name: String, data: Dictionary
 			has_subclasses = true
 			var sub_class_file_name = key.to_snake_case() + ".gd"
 			var sub_class_path = child_dir_path.path_join(sub_class_file_name)
+			
+			# Build UID for proper path population on first run.
+			var uid_path = sub_class_path + ".uid"
+			if not FileAccess.file_exists(uid_path):
+				if not DirAccess.dir_exists_absolute(uid_path.get_base_dir()):
+					DirAccess.make_dir_recursive_absolute(uid_path.get_base_dir())
+				var uid_file = FileAccess.open(uid_path, FileAccess.WRITE)
+				var new_uid = ResourceUID.create_id()
+				var new_uid_string = ResourceUID.id_to_text(new_uid)
+				uid_file.store_string(new_uid_string)
+				ResourceUID.add_id(new_uid, sub_class_path)
+			
+			
 			file_content += _get_preload(key, sub_class_path)
 			
 		elif value is String: # This is a final constant (e.g., a scene path)
@@ -352,7 +384,16 @@ static func _generate_class_and_subclasses(_class_name: String, data: Dictionary
 	else:
 		printerr("Failed to write to file: ", file_path)
 		return # Stop if we can't write the parent file
-
+	
+	var uid_path = file_path + ".uid"
+	if not FileAccess.file_exists(uid_path):
+		var uid_file = FileAccess.open(uid_path, FileAccess.WRITE)
+		var new_uid = ResourceUID.create_id()
+		var new_uid_string = ResourceUID.id_to_text(new_uid)
+		uid_file.store_string(new_uid_string)
+		
+		ResourceUID.add_id(new_uid, file_path)
+	
 	# subclasses, create their directory and recurse
 	if has_subclasses:
 		DirAccess.make_dir_recursive_absolute(child_dir_path)

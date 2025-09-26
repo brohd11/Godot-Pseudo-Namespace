@@ -41,14 +41,15 @@ static func _on_editor_settings_changed():
 	set_colors()
 
 static func get_namespace_hl_info(current_line_text):
-	#var syntax_plus_ins = SyntaxPlus.get_instance() # THINK CAN BE ELIMINATED, CHECK THAT IS INSTANCED BY PLUGIN
+	if color_built_in_clash == null:
+		set_colors()
+	
 	var namespace_files = NamespaceBuilder.get_namespace_classes()
 	var namespace_dir = NamespaceBuilder.get_generated_dir()
 	
 	var stripped_text:String = current_line_text.get_slice("#!", 1).replace(".", " ").strip_edges()
 	var new_hl_info = SyntaxPlus.get_single_line_highlight(stripped_text)
-	#var words = stripped_text.split(" ")
-	#words.remove_at(0) # remove namespace
+	
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 1: 
 		return new_hl_info
@@ -72,15 +73,17 @@ static func get_namespace_hl_info(current_line_text):
 			namespace_script = NamespaceBuilder.class_name_in_script(word, namespace_script)
 		
 		var idx = stripped_text.find(word, last_idx)
-		if idx == -1:
+		if idx == -1 or not word.is_valid_ascii_identifier():
+			var first_part = word
 			if word.find(".") > -1:
-				var first_part = word.get_slice(".", 0)
-				var first_idx = stripped_text.find(first_part, last_idx)
-				_set_hl_info_at_idx(new_hl_info, first_idx, word, color_clash)
-				for key in new_hl_info.keys():
-					if key > first_idx:
-						new_hl_info.erase(key)
-				return new_hl_info
+				first_part = word.get_slice(".", 0)
+			
+			var first_idx = stripped_text.find(first_part, last_idx)
+			_set_hl_info_at_idx(new_hl_info, first_idx, word, color_clash)
+			for key in new_hl_info.keys():
+				if key > first_idx:
+					new_hl_info.erase(key)
+			return new_hl_info
 		
 		last_idx = idx + word.length() - 1
 		
