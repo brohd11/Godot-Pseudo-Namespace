@@ -1,8 +1,14 @@
 ## Namespace Generator
 
-This plugin will generate files that will organize your classes somewhat like a namespace. This doesn't change any functionality like I would expect namespaces to do, but it removes the need to create the classes full of preloads and updating the files when you want to move something.
+This plugin will generate files that will organize your classes somewhat like a namespace. This doesn't change any functionality like I would expect an actual namespace implementation would, but it removes the need to create classes full of preloads manually and updating the files when you want to move reorganize.
 
-The files generated use UIDs to preload the class, so they are resilient to moving around files.
+<img width="395" height="58" alt="namespace_hl" src="https://github.com/user-attachments/assets/9556356b-c00f-4c51-bca0-ed8cd4252e37" />
+
+This is an example of how the syntax highlighter will interact with the namespace declaration, and how you would access a class from the generated file.
+ - ALib is the "namespace"
+ - Runtime a subclass
+ - UTree and UFile are the actual classes to be used
+
 
 ### How to Use
 
@@ -11,14 +17,14 @@ First off, be sure to save all files before running the build.
 You can create a namespace by writing a tag near the top of your script (within the top 10 lines).
 "#!" must proceed the declaration.
 
-``` gdscript
+``` 
 extends SomeClass
 #! namespace MyNameSpace class ThisClass
 ```
 
 Alternatively, you can leave out the class keyword.
 
-``` gdscript
+``` 
 extends SomeClass
 #! namespace MyNameSpace.ThisClass
 ```
@@ -27,11 +33,13 @@ This will generate the file `my_name_space.gd` as global class `MyNameSpace`.
 
 Inside, it will have the script preloaded to provide access to the class:
 
-`const ThisClass = preload("path/to/this/class.gd")` 
+`const ThisClass = preload("uid_for_this_class")`
+
+The files generated use UIDs to preload the class, so they are resilient to moving around files.
 
 You can do as many sub classes as you want:
 
-``` gdscript
+``` 
 #! namespace MyNameSpace.SubSpace.Sub.Sub.Sub class ThisClass
 or
 #! namespace MyNameSpace.SubSpace.Sub.Sub.Sub.ThisClass
