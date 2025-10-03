@@ -5,6 +5,7 @@ extends EditorScript
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_file.gd")
 const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_regex.gd")
 const ConfirmationDialogHandler = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/dialog/confirmation/confirmation_dialog_handler.gd")
+const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
 
 
 const _RES = "res://" 
@@ -23,7 +24,7 @@ static func parse(commands, args, editor_console):
 		build_files()
 		return
 	elif c_2 == "dir":
-		print(NamespaceBuilder.get_generated_dir())
+		print(get_generated_dir())
 		return
 	elif c_2 == "set-dir":
 		if not args.size() == 1:
@@ -155,6 +156,8 @@ static func _get_used_namespace_references():
 	return namespace_references
 
 static func _compare_namespace_data(namespace_references, namespace_data):
+	var scripts_dict = {}
+	
 	for path in namespace_references.keys():
 		var ref_data = namespace_references[path]
 		for ref:String in ref_data.keys():
@@ -163,7 +166,9 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			var valid_ref = true
 			for part in parts:
 				if new_data is not Dictionary: # trying to go too deep
-					valid_ref = false
+					var final_path = new_data
+					if not _check_script_for_member(final_path, scripts_dict, part):
+						valid_ref = false
 					break
 				if new_data.has(part):
 					new_data = new_data[part]
@@ -180,7 +185,8 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 	
 	
 	if not namespace_references.is_empty():
-		printerr("Broken namespace references:")
+		print_rich("[color=fedd66]Possible broken namespace references:[/color]")
+		
 		for path in namespace_references.keys():
 			var data = namespace_references.get(path)
 			print_rich("[color=fe786b]%s[/color]" % path)
@@ -194,6 +200,29 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			return false
 	
 	return true
+
+static func _check_script_for_member(script_path:String, scripts_dict:Dictionary, member_to_check:String):
+	if member_to_check == "new":
+		return true # this doesnt appear in members
+	
+	if not scripts_dict.has(script_path):
+		var script = load(script_path)
+		var script_data = {}
+		var s_members = UClassDetail.script_get_all_members(script)
+		script_data["script"] = s_members
+		var c_members = UClassDetail.class_get_all_members(script)
+		script_data["class"] = c_members
+		scripts_dict[script_path] = script_data
+	
+	var script_data = scripts_dict[script_path]
+	var s_members = script_data.get("script", [])
+	if member_to_check in s_members:
+		return true
+	var c_members = script_data.get("class", [])
+	if member_to_check in c_members:
+		return true
+	
+	return false
 
 
 static func _get_open_scripts(): # TODO MOVE this somewhere handy?
