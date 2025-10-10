@@ -53,19 +53,6 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 			return
 	
 	_get_namespace_code_completions(text_ed, current_line_text, true)
-	
-	## Use above to display scripts which are not valid
-	#
-	#var namespace_class = words[0]
-	#words.remove_at(0)
-	#if not namespace_classes.has(namespace_class):
-		#return
-	#
-	#var namespace_path = namespace_classes.get(namespace_class)
-	#var had_valid = _check_scripts(text_ed, namespace_path, words)
-	#if had_valid:
-		#text_ed.cancel_code_completion()
-		#text_ed.update_code_completion_options(false)
 
 
 static func _get_extended_class(text_ed:CodeEdit, current_line_text:String):
@@ -122,6 +109,9 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 		return
 	
 	var constants = current_script.get_script_constant_map()
+	if not current_script.resource_path.begins_with(namespace_dir):
+		return false # if current script is outside, don't want to overide completions
+	
 	#print("Final Script: ", current_script.resource_path)
 	#print("Found Constants: ", constants.keys())
 	var added_options = []
