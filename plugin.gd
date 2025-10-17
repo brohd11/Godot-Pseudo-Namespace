@@ -5,6 +5,7 @@ const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.g
 const CodeCompletion = preload("res://addons/namespace/src/code_completion.gd")
 const SyntaxHighlighting = preload("res://addons/namespace/src/syntax_highlighting.gd")
 
+var code_completion
 var editor_console:EditorConsole
 var syntax_plus:SyntaxPlus
 
@@ -16,6 +17,7 @@ func _enable_plugin() -> void:
 	SyntaxHighlighting.set_default_settings()
 
 func _disable_plugin() -> void:
+	
 	pass
 
 func _enter_tree() -> void:
@@ -26,7 +28,7 @@ func _enter_tree() -> void:
 	}
 	editor_console.register_temp_scope(scope_data)
 	
-	CodeCompletion.connect_signal()
+	code_completion = CodeCompletion.new()
 	SyntaxHighlighting.set_colors()
 	
 	syntax_plus = SyntaxPlus.register_node(self)
@@ -41,7 +43,8 @@ func _exit_tree() -> void:
 		_unregister_syntax_data()
 		syntax_plus.unregister_node(self)
 	
-	CodeCompletion.disconnect_signal()
+	if is_instance_valid(code_completion):
+		code_completion.clean_up()
 
 
 func _register_syntax_data():

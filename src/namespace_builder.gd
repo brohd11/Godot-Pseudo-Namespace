@@ -208,9 +208,9 @@ static func _check_script_for_member(script_path:String, scripts_dict:Dictionary
 	if not scripts_dict.has(script_path):
 		var script = load(script_path)
 		var script_data = {}
-		var s_members = UClassDetail.script_get_all_members(script)
+		var s_members = UClassDetail.script_get_all_members(script).keys()
 		script_data["script"] = s_members
-		var c_members = UClassDetail.class_get_all_members(script)
+		var c_members = UClassDetail.class_get_all_members(script).keys()
 		script_data["class"] = c_members
 		scripts_dict[script_path] = script_data
 	
