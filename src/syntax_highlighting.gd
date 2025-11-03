@@ -40,14 +40,14 @@ static func set_colors():
 static func _on_editor_settings_changed():
 	set_colors()
 
-static func get_namespace_hl_info(current_line_text):
+static func get_namespace_hl_info(current_line_text:String, line:int, comment_tag_idx:int):
 	if color_built_in_clash == null:
 		set_colors()
 	
 	var namespace_files = NamespaceBuilder.get_namespace_classes()
 	var namespace_dir = NamespaceBuilder.get_generated_dir()
 	
-	var stripped_text:String = current_line_text.get_slice("#!", 1).replace(".", " ").strip_edges()
+	var stripped_text:String = current_line_text.substr(comment_tag_idx + 2).replace(".", " ").strip_edges() # + 2 to acount for tag
 	var new_hl_info = SyntaxPlus.get_single_line_highlight(stripped_text)
 	
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)

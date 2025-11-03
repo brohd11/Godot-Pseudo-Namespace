@@ -2,10 +2,12 @@
 extends EditorPlugin
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
-const CodeCompletion = preload("res://addons/namespace/src/code_completion.gd")
+const DeclarationCodeCompletion = preload("res://addons/namespace/src/declaration_code_completion.gd")
+const ImportCodeCompletion = preload("res://addons/namespace/src/import_code_completion.gd")
 const SyntaxHighlighting = preload("res://addons/namespace/src/syntax_highlighting.gd")
 
-var code_completion
+var declaration_code_completion
+var import_code_completion
 var editor_console:EditorConsole
 var syntax_plus:SyntaxPlus
 
@@ -28,7 +30,8 @@ func _enter_tree() -> void:
 	}
 	editor_console.register_temp_scope(scope_data)
 	
-	code_completion = CodeCompletion.new()
+	declaration_code_completion = DeclarationCodeCompletion.new()
+	import_code_completion = ImportCodeCompletion.new()
 	SyntaxHighlighting.set_colors()
 	
 	syntax_plus = SyntaxPlus.register_node(self)
@@ -43,12 +46,14 @@ func _exit_tree() -> void:
 		_unregister_syntax_data()
 		syntax_plus.unregister_node(self)
 	
-	if is_instance_valid(code_completion):
-		code_completion.clean_up()
+	if is_instance_valid(declaration_code_completion):
+		declaration_code_completion.clean_up()
+	if is_instance_valid(import_code_completion):
+		import_code_completion.clean_up()
 
 
 func _register_syntax_data():
-	SyntaxPlus.register_highlight_callable("namespace", SyntaxHighlighting.get_namespace_hl_info)
+	SyntaxPlus.register_highlight_callable("#!", "namespace", SyntaxHighlighting.get_namespace_hl_info)
 
 func _unregister_syntax_data():
-	SyntaxPlus.unregister_highlight_callable("namespace")
+	SyntaxPlus.unregister_highlight_callable("#!", "namespace")

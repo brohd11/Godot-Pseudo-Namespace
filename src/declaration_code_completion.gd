@@ -1,25 +1,35 @@
 extends EditorCodeCompletion
 
+var script_preload_map
+
 func _singleton_ready():
 	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)
 
+func _on_editor_script_changed(script):
+	script_preload_map = UClassDetail.script_get_preloads(script)
+
 
 func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
-	var text_ed = EditorInterface.get_script_editor().get_current_editor().get_base_editor()
-	#await text_ed.get_tree().process_frame
-	var current_line_text = text_ed.get_line(text_ed.get_caret_line())
+	var current_state = get_state()
+	if caret_in_func_call():
+		return false
+	var current_line_text = script_editor.get_line(script_editor.get_caret_line())
 	if current_line_text.begins_with("#! namespace"):
-		return _namespace_declaration(text_ed, current_line_text)
+		return _namespace_declaration(script_editor, current_line_text)
 	elif current_line_text.find("extends ") > -1: # "" <- parser
-		if text_ed.get_caret_column() < current_line_text.find("extends "): # "" <- parser
+		if script_editor.get_caret_column() < current_line_text.find("extends "): # "" <- parser
 			return false
-		return _get_extended_class(text_ed, current_line_text)
+		return _get_extended_class(script_editor, current_line_text)
 	elif current_line_text.find("=") > -1:
 		var eq_idx = current_line_text.find("=")
-		if eq_idx == -1 or text_ed.get_caret_column() < eq_idx: # "" <- parser
+		if eq_idx == -1 or script_editor.get_caret_column() < eq_idx: # "" <- parser
 			return false
-		return _assignment(text_ed, current_line_text)
+		
+		return _assignment(script_editor, current_line_text)
 	return false
+
+
+#region Declaration/Assignment
 
 static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 	var namespace_classes = NamespaceBuilder.get_namespace_classes()
@@ -124,3 +134,5 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 
 static func _get_icon(icon_name, theme=&"EditorIcons"):
 	return EditorInterface.get_base_control().get_theme_icon(icon_name, theme)
+
+#endregion

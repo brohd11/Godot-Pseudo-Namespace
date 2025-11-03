@@ -531,10 +531,7 @@ static func get_namespace_string_parts(original_line_text:String, clean_parts:=t
 
 
 static func get_namespace_classes() -> Dictionary:
-	var namespace_dir = NamespaceBuilder.GENERATED_DIR
-	var settings = _get_setting_singleton()
-	if settings.has_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING):
-		namespace_dir = settings.get_setting(NamespaceBuilder.GEN_DIR_PROJECT_SETTING)
+	var namespace_dir = get_generated_dir()
 	
 	var namespace_files = []
 	if DirAccess.dir_exists_absolute(namespace_dir):
@@ -543,7 +540,6 @@ static func get_namespace_classes() -> Dictionary:
 			var path = namespace_dir.path_join(f)
 			namespace_files.append(path)
 	
-	var syntax_plus_ins = SyntaxPlus.get_instance()
 	var valid_global_classes = {}
 	var class_data = ProjectSettings.get_global_class_list()
 	for dict in class_data:
@@ -553,6 +549,47 @@ static func get_namespace_classes() -> Dictionary:
 			valid_global_classes[name] = path
 	
 	return valid_global_classes
+
+static func get_namespace_class_maps():
+	var namespace_classes = get_namespace_classes()
+	var map = {}
+	for name in namespace_classes.keys():
+		var path = namespace_classes.get(name)
+		var script = load(path)
+		var preloads = UClassDetail.script_get_preloads(script, true)
+		if not preloads.is_empty():
+			var paths = []
+			map[path] = preloads
+			for p in preloads.keys():
+				var p_script = preloads[p]
+				var p_path = p_script.resource_path
+				map[p_path] = path
+	
+	return map
+
+
+#static func _get_namespace_map(start_script:GDScript):
+	#var to_process = [start_script] # Our manual stack
+	#var checked = {}
+	#var results = []
+	#
+	#while not to_process.is_empty():
+		#var current_script = to_process.pop_back() # Get the next script to check
+		#
+		#if checked.has(current_script):
+			#continue # Already handled this one
+		#
+		#checked[current_script] = true
+		#results.append(current_script.resource_path) # Or whatever data you want to collect
+		#
+		#var constants = UClassDetail.script_get_all_constants(current_script)
+		#for c in constants.keys():
+			#var val = constants.get(c)
+			#if val is GDScript and val.resource_path != "":
+				#if not checked.has(val):
+					#to_process.push_back(val) # Add its children to the stack
+	#
+	#return results
 
 static func class_name_in_script(word, script):
 	var const_map = script.get_script_constant_map()
