@@ -40,7 +40,7 @@ static func set_colors():
 static func _on_editor_settings_changed():
 	set_colors()
 
-static func get_namespace_hl_info(current_line_text:String, line:int, comment_tag_idx:int):
+static func get_namespace_hl_info(script_editor, current_line_text:String, line:int, comment_tag_idx:int):
 	if color_built_in_clash == null:
 		set_colors()
 	

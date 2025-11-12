@@ -3,11 +3,9 @@ extends EditorPlugin
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 const DeclarationCodeCompletion = preload("res://addons/namespace/src/declaration_code_completion.gd")
-const ImportCodeCompletion = preload("res://addons/namespace/src/import_code_completion.gd")
 const SyntaxHighlighting = preload("res://addons/namespace/src/syntax_highlighting.gd")
 
 var declaration_code_completion
-var import_code_completion
 var editor_console:EditorConsole
 var syntax_plus:SyntaxPlus
 
@@ -31,7 +29,6 @@ func _enter_tree() -> void:
 	editor_console.register_temp_scope(scope_data)
 	
 	declaration_code_completion = DeclarationCodeCompletion.new()
-	import_code_completion = ImportCodeCompletion.new()
 	SyntaxHighlighting.set_colors()
 	
 	syntax_plus = SyntaxPlus.register_node(self)
@@ -48,8 +45,6 @@ func _exit_tree() -> void:
 	
 	if is_instance_valid(declaration_code_completion):
 		declaration_code_completion.clean_up()
-	if is_instance_valid(import_code_completion):
-		import_code_completion.clean_up()
 
 
 func _register_syntax_data():

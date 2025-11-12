@@ -1,13 +1,11 @@
 extends EditorCodeCompletion
 
-var script_preload_map
 
 func _singleton_ready():
 	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)
 
 func _on_editor_script_changed(script):
-	script_preload_map = UClassDetail.script_get_preloads(script)
-
+	pass
 
 func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 	var current_state = get_state()
@@ -24,7 +22,6 @@ func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 		var eq_idx = current_line_text.find("=")
 		if eq_idx == -1 or script_editor.get_caret_column() < eq_idx: # "" <- parser
 			return false
-		
 		return _assignment(script_editor, current_line_text)
 	return false
 
@@ -34,9 +31,7 @@ func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 	var namespace_classes = NamespaceBuilder.get_namespace_classes()
 	var icon = _get_icon("Script")
-	
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
-	
 	if words.size() < 2:
 		if words.is_empty() or not namespace_classes.has(words[0]) and current_line_text.find(".") == -1:
 			for _class in namespace_classes.keys():
@@ -50,13 +45,12 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 
 static func _get_extended_class(text_ed:CodeEdit, current_line_text:String):
 	var stripped_text:String = current_line_text.get_slice("extends ", 1).strip_edges() # "" <- parser
-	
 	return _get_namespace_code_completions(text_ed, stripped_text)
 
 static func _assignment(text_ed:CodeEdit, current_line_text:String):
 	var stripped_text:String = current_line_text.get_slice("=", 1).strip_edges() # "" <- parser
-	
 	return _get_namespace_code_completions(text_ed, stripped_text)
+
 
 static func _get_namespace_code_completions(text_ed, current_line_text, show_scripts = true):
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text, false)
@@ -106,8 +100,6 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 	if not current_script.resource_path.begins_with(namespace_dir):
 		return false # if current script is outside, don't want to overide completions
 	
-	#print("Final Script: ", current_script.resource_path)
-	#print("Found Constants: ", constants.keys())
 	var added_options = []
 	var icon
 	for key in constants.keys():
@@ -129,7 +121,6 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 	
 	if added_options.is_empty():
 		return false
-	
 	return true
 
 static func _get_icon(icon_name, theme=&"EditorIcons"):
