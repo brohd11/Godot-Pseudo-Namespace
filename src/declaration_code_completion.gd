@@ -9,15 +9,16 @@ func _on_editor_script_changed(script):
 
 func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 	var current_state = get_state()
-	if caret_in_func_call():
+	if current_state == State.FUNC_ARGS:
 		return false
+	
 	var current_line_text = script_editor.get_line(script_editor.get_caret_line())
 	if current_line_text.begins_with("#! namespace"):
 		return _namespace_declaration(script_editor, current_line_text)
-	elif current_line_text.find("extends ") > -1: # "" <- parser
-		if script_editor.get_caret_column() < current_line_text.find("extends "): # "" <- parser
-			return false
-		return _get_extended_class(script_editor, current_line_text)
+	#elif current_line_text.find("extends ") > -1: # "" <- parser
+		#if script_editor.get_caret_column() < current_line_text.find("extends "): # "" <- parser
+			#return false
+		#return _get_extended_class(script_editor, current_line_text)
 	elif current_line_text.find("=") > -1:
 		var eq_idx = current_line_text.find("=")
 		if eq_idx == -1 or script_editor.get_caret_column() < eq_idx: # "" <- parser
