@@ -9,6 +9,7 @@ var declaration_code_completion
 var editor_console:EditorConsole
 var syntax_plus:SyntaxPlus
 
+
 func _get_plugin_name() -> String:
 	return "Namespace"
 
@@ -28,6 +29,8 @@ func _enter_tree() -> void:
 	}
 	editor_console.register_temp_scope(scope_data)
 	
+	EditorCodeCompletion.register_plugin(self)
+	
 	declaration_code_completion = DeclarationCodeCompletion.new()
 	SyntaxHighlighting.set_colors()
 	
@@ -45,6 +48,8 @@ func _exit_tree() -> void:
 	
 	if is_instance_valid(declaration_code_completion):
 		declaration_code_completion.clean_up()
+	
+	EditorCodeCompletion.unregister_plugin(self)
 
 
 func _register_syntax_data():
