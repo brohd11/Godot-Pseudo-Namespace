@@ -284,6 +284,9 @@ static func _clear_directory(directory: String):
 
 
 static func _clean_up_uids(directory: String):
+	if not DirAccess.dir_exists_absolute(directory):
+		DirAccess.make_dir_recursive_absolute(directory)
+	
 	var dir_arrays = UFile.scan_for_dirs(directory, true)
 	for array in dir_arrays:
 		array.reverse()
