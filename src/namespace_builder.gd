@@ -38,7 +38,7 @@ static func get_completion(raw_text, commands, args, editor_console):
 	if commands.size() == 1:
 		complete_data["build"] = {}
 		complete_data["dir"] = {}
-		complete_data["set-dir"] = {"METADATA_KEY": {"add_args":true}}
+		complete_data["set-dir"] = {PopupWrapper.PopupHelper.ParamKeys.METADATA: {"add_args":true}}
 	
 	#print('%s, %s, %s, %s' % [raw_text, commands, args, editor_console])
 	return complete_data
