@@ -4,9 +4,9 @@ extends EditorScript
 #! remote
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_file.gd")
 const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_regex.gd")
-const ConfirmationDialogHandler = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/dialog/confirmation/confirmation_dialog_handler.gd")
 const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
 
+@warning_ignore_start("static_called_on_instance")
 
 const _RES = "res://" 
 const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
@@ -81,9 +81,8 @@ static func build_files():
 		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
 	
 	generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
-	var conf = ConfirmationDialogHandler.new("Ensure all files are saved before running build.")
-	var handled = await conf.handled
-	if not handled:
+	var confirmed = await ALibRuntime.Dialog.confirm("Ensure all files are saved before running build.")
+	if not confirmed:
 		return
 	
 	print("Starting namespace file generation...")
@@ -108,7 +107,7 @@ static func build_files():
 	
 	_clear_directory(generated_dir)
 	
-	#_generate_namespace_files(namespace_data, generated_dir)
+	#_generate_namespace_files(namespace_data, generated_dir) #^ for inner class style
 	_generate_namespace_file_with_dir(namespace_data, generated_dir)
 	
 	print("Namespace file generation complete.")
@@ -193,10 +192,8 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			for ref in data.keys():
 				print("\tReference at line %s: %s" % [data.get(ref), ref])
 		
-		
-		var conf = ConfirmationDialogHandler.new("Some references will be broken by\nnew namespace generated.\nProceed?")
-		var handled = await conf.handled
-		if not handled:
+		var confirmed = await ALibRuntime.Dialog.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
+		if not confirmed:
 			return false
 	
 	return true
