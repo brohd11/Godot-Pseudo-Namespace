@@ -2,8 +2,8 @@
 class_name NamespaceBuilder
 extends EditorScript
 #! remote
-const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_file.gd")
-const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/src/u_regex.gd")
+const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")
+const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_regex.gd")
 const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
 
 @warning_ignore_start("static_called_on_instance")
