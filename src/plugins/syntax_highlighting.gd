@@ -48,7 +48,7 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 	var namespace_dir = NamespaceBuilder.get_generated_dir()
 	
 	var stripped_text:String = current_line_text.substr(comment_tag_idx + 2).replace(".", " ").strip_edges() # + 2 to acount for tag
-	var new_hl_info = SyntaxPlus.get_single_line_highlight(stripped_text)
+	var new_hl_info = SyntaxPlusSingleton.get_single_line_highlight(stripped_text)
 	
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 1: 
@@ -112,12 +112,12 @@ static func _new_namespace_highlighting(current_line_text:String, hl_info:Dictio
 	return hl_info
 
 static func _set_hl_info_at_idx(hl_info, idx, word, color, force:=false):
-	var symbol_color = SyntaxPlus.get_instance().symbol_color
+	var symbol_color = SyntaxPlusSingleton.get_instance().symbol_color
 	hl_info[idx + word.length()] = {"color": symbol_color}
 	var color_data = hl_info.get(idx)
 	if color_data and not force:
 		var existing_color = color_data.get("color")
-		if existing_color != SyntaxPlus.get_instance().default_text_color:
+		if existing_color != SyntaxPlusSingleton.get_instance().default_text_color:
 			hl_info[idx] = {"color": color_built_in_clash}
 			return
 	

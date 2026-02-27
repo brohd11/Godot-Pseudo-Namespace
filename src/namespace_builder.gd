@@ -14,34 +14,7 @@ const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
 const GENERATED_DIR = "res://namespace_classes/" #! ignore-remote
 const NAMESPACE_TAG = "#! namespace "
 
-static var _open_scripts
-
-static func parse(commands, args, editor_console):
-	if commands.size() == 1:
-		return
-	var c_2 = commands[1]
-	if c_2 == "build":
-		build_files()
-		return
-	elif c_2 == "dir":
-		print(get_generated_dir())
-		return
-	elif c_2 == "set-dir":
-		if not args.size() == 1:
-			printerr("Expected 1 arg for set-dir command.")
-			return
-		set_generated_dir(args[0])
-
-
-static func get_completion(raw_text, commands, args, editor_console):
-	var complete_data = {}
-	if commands.size() == 1:
-		complete_data["build"] = {}
-		complete_data["dir"] = {}
-		complete_data["set-dir"] = {PopupWrapper.PopupHelper.ParamKeys.METADATA: {"add_args":true}}
-	
-	#print('%s, %s, %s, %s' % [raw_text, commands, args, editor_console])
-	return complete_data
+#static var _open_scripts
 
 
 static func _get_setting_singleton(): ## Editor Settings for now. Possibly need to use ProjectSettings.save()
@@ -322,12 +295,14 @@ static func _scan_and_parse_namespaces() -> Variant:
 	var lines_to_check = 10
 	var data = {}
 	var all_files = UFile.scan_for_files(_RES, ["gd"])
-	var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
-	var open_scripts_dict = {}
-	for script in open_scripts:
-		var path = script.resource_path
-		open_scripts_dict[path] = script
-	var open_script_paths = open_scripts_dict.keys()
+	#^{[r/] Think this is obsolete
+	#var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
+	#var open_scripts_dict = {}
+	#for script in open_scripts:
+		#var path = script.resource_path
+		#open_scripts_dict[path] = script
+	#var open_script_paths = open_scripts_dict.keys()
+	#^}
 	for file_path in all_files:
 		
 		var file = FileAccess.open(file_path, FileAccess.READ)
