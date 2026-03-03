@@ -9,6 +9,8 @@ func get_commands() -> Dictionary:
 	commands_obj.add_command("set-dir", true, NamespaceBuilder.set_generated_dir)
 	return commands_obj.get_commands()
 
-func get_completion(_raw_text, commands, _args):
-	if commands.size() == 1:
+func get_completion(completion_context:CompletionContext) -> Dictionary:
+	var registered = get_commands()
+	if not _check_command_index_valid(completion_context.commands, 1, registered.keys()):
 		return get_commands()
+	return {}

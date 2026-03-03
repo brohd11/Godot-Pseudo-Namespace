@@ -1,5 +1,6 @@
 extends EditorCodeCompletion
 
+const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 
 func _singleton_ready():
 	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)

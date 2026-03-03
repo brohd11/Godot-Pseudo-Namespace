@@ -1,5 +1,4 @@
 @tool
-class_name NamespaceBuilder
 extends EditorScript
 #! remote
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")

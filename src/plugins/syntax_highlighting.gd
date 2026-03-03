@@ -1,4 +1,6 @@
 
+const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
+
 const PLUGIN_SETTING = "plugin/namespace/"
 const COLOR_BUILT_IN_CLASH = PLUGIN_SETTING + "color/built_in_clash"
 const COLOR_EXISTING = PLUGIN_SETTING + "color/existing"
