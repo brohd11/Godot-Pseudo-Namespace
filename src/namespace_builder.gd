@@ -1,6 +1,7 @@
 @tool
 extends EditorScript
 #! remote
+const Dialog = preload("res://addons/addon_lib/brohd/alib_runtime/dialog/dialog.gd")
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")
 const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_regex.gd")
 const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
@@ -53,7 +54,7 @@ static func build_files():
 		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
 	
 	generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
-	var confirmed = await ALibRuntime.Dialog.confirm("Ensure all files are saved before running build.")
+	var confirmed = await Dialog.confirm("Ensure all files are saved before running build.")
 	if not confirmed:
 		return
 	
@@ -164,7 +165,7 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			for ref in data.keys():
 				print("\tReference at line %s: %s" % [data.get(ref), ref])
 		
-		var confirmed = await ALibRuntime.Dialog.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
+		var confirmed = await Dialog.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
 		if not confirmed:
 			return false
 	
