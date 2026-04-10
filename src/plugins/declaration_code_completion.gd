@@ -9,8 +9,8 @@ func _on_editor_script_changed(script):
 	pass
 
 func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
-	var current_state = get_state()
-	if current_state == State.FUNC_ARGS:
+	var caret_context = get_caret_context()
+	if caret_context.is_in_function_call():
 		return false
 	
 	var current_line_text = script_editor.get_line(script_editor.get_caret_line())
