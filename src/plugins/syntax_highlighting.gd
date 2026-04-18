@@ -49,8 +49,12 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 	var namespace_files = NamespaceBuilder.get_namespace_classes()
 	var namespace_dir = NamespaceBuilder.get_generated_dir()
 	
+	var comment_text = current_line_text.substr(comment_tag_idx)
+	var new_hl_info = SyntaxPlusSingleton.HLInfo.highlight_prefix("#!", comment_text)
 	var stripped_text:String = current_line_text.substr(comment_tag_idx + 2).replace(".", " ").strip_edges() # + 2 to acount for tag
-	var new_hl_info = SyntaxPlusSingleton.get_single_line_highlight(stripped_text)
+	var gd_hl = SyntaxPlusSingleton.get_single_line_highlight(stripped_text)
+	for idx in gd_hl.keys():
+		new_hl_info[idx + 3] = gd_hl[idx]
 	
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 1: 
@@ -58,9 +62,9 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 	var namespace_class = words[0]
 	
 	if not namespace_files.has(namespace_class):
-		return _new_namespace_highlighting(current_line_text, new_hl_info, words)
+		return _new_namespace_highlighting(comment_text, new_hl_info, words)
 	
-	var ns_idx = stripped_text.find(namespace_class)
+	var ns_idx = comment_text.find(namespace_class)
 	_set_hl_info_at_idx(new_hl_info, ns_idx, namespace_class, color_existing, true)
 	words.remove_at(0)
 	
@@ -74,13 +78,13 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 		if namespace_script:
 			namespace_script = NamespaceBuilder.class_name_in_script(word, namespace_script)
 		
-		var idx = stripped_text.find(word, last_idx)
+		var idx = comment_text.find(word, last_idx)
 		if idx == -1 or not word.is_valid_ascii_identifier():
 			var first_part = word
 			if word.find(".") > -1:
 				first_part = word.get_slice(".", 0)
 			
-			var first_idx = stripped_text.find(first_part, last_idx)
+			var first_idx = comment_text.find(first_part, last_idx)
 			_set_hl_info_at_idx(new_hl_info, first_idx, word, color_clash)
 			for key in new_hl_info.keys():
 				if key > first_idx:
@@ -93,22 +97,23 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 			if namespace_script.resource_path.begins_with(namespace_dir) and i < words.size() - 1: # existing namespace member
 				_set_hl_info_at_idx(new_hl_info, idx, word, color_existing)
 			else:
-				var current_script = EditorInterface.get_script_editor().get_current_script().resource_path
-				if current_script == namespace_script.resource_path:
-					_set_hl_info_at_idx(new_hl_info, idx, word, color_current) # current script generated
-				else:
-					_set_hl_info_at_idx(new_hl_info, idx, word, color_clash) # overwriting
+				var current_script = EditorInterface.get_script_editor().get_current_script()
+				if is_instance_valid(current_script):
+					var current_script_path = current_script.resource_path
+					if current_script_path == namespace_script.resource_path:
+						_set_hl_info_at_idx(new_hl_info, idx, word, color_current) # current script generated
+					else:
+						_set_hl_info_at_idx(new_hl_info, idx, word, color_clash) # overwriting
 			
 		else:
 			_set_hl_info_at_idx(new_hl_info, idx, word, color_new) # new class
 	
 	return new_hl_info
 
-static func _new_namespace_highlighting(current_line_text:String, hl_info:Dictionary, words:Array):
-	var stripped_text:String = current_line_text.get_slice("#!", 1).replace(".", " ").strip_edges()
-	var last_idx = stripped_text.find("namespace") + "namespace".length()
+static func _new_namespace_highlighting(comment_text:String, hl_info:Dictionary, words:Array):
+	var last_idx = comment_text.find("namespace") + "namespace".length()
 	for word:String in words:
-		var idx = stripped_text.find(word, last_idx)
+		var idx = comment_text.find(word, last_idx)
 		last_idx = idx + word.length() - 1
 		_set_hl_info_at_idx(hl_info, idx, word, color_new)
 	return hl_info
