@@ -3,7 +3,7 @@ extends EditorPlugin
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 
-const ConsoleCommand = preload("res://addons/namespace/src/plugins/console_command.gd")
+const ConsoleCommand = preload("res://addons/namespace/src/plugins/console_command/console_command.gd")
 
 const DeclarationCodeCompletion = preload("res://addons/namespace/src/plugins/declaration_code_completion.gd")
 const SyntaxHighlighting = preload("res://addons/namespace/src/plugins/syntax_highlighting.gd")
