@@ -14,16 +14,20 @@ func _get_plugin_name() -> String:
 	return "Namespace"
 
 func _enable_plugin() -> void:
-	NamespaceBuilder.set_generated_dir_default()
-	SyntaxHighlighting.set_default_settings()
+	#NamespaceBuilder.set_generated_dir_default()
+	#SyntaxHighlighting.set_default_settings()
+	pass
 
 func _disable_plugin() -> void:
 	
 	pass
 
 func _enter_tree() -> void:
+	NamespaceBuilder.set_generated_dir_default()
+	SyntaxHighlighting.set_default_settings()
+	
 	EditorConsoleSingleton.register_node(self)
-	EditorConsoleSingleton.register_temp_scope("namespace", ConsoleCommand.new())
+	EditorConsoleSingleton.register_temp_scope("namespace", ConsoleCommand)
 	
 	EditorCodeCompletion.register_plugin(self)
 	

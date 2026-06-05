@@ -543,29 +543,6 @@ static func get_namespace_class_maps():
 	return map
 
 
-#static func _get_namespace_map(start_script:GDScript):
-	#var to_process = [start_script] # Our manual stack
-	#var checked = {}
-	#var results = []
-	#
-	#while not to_process.is_empty():
-		#var current_script = to_process.pop_back() # Get the next script to check
-		#
-		#if checked.has(current_script):
-			#continue # Already handled this one
-		#
-		#checked[current_script] = true
-		#results.append(current_script.resource_path) # Or whatever data you want to collect
-		#
-		#var constants = UClassDetail.script_get_all_constants(current_script)
-		#for c in constants.keys():
-			#var val = constants.get(c)
-			#if val is GDScript and val.resource_path != "":
-				#if not checked.has(val):
-					#to_process.push_back(val) # Add its children to the stack
-	#
-	#return results
-
 static func class_name_in_script(word, script):
 	var const_map = script.get_script_constant_map()
 	if const_map.has(word):
