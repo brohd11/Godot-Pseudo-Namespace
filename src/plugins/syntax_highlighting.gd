@@ -42,13 +42,14 @@ static func set_colors():
 static func _on_editor_settings_changed():
 	set_colors()
 
-static func get_namespace_hl_info(script_editor, current_line_text:String, line:int, comment_tag_idx:int):
+## plugin is supplied by a bind when the callable is registered in plugin.gd, so
+## this stays static while still reaching the cache without a static var.
+static func get_namespace_hl_info(script_editor, current_line_text:String, line:int, comment_tag_idx:int, plugin):
 	if color_built_in_clash == null:
 		set_colors()
-	
-	var namespace_files = NamespaceBuilder.get_namespace_classes()
-	var namespace_dir = NamespaceBuilder.get_generated_dir()
-	
+
+	var namespace_files = plugin.namespace_classes
+
 	var comment_text = current_line_text.substr(comment_tag_idx)
 	var new_hl_info = SyntaxPlusSingleton.HLInfo.highlight_prefix("#!", comment_text)
 	var stripped_text:String = current_line_text.substr(comment_tag_idx + 2).replace(".", " ").strip_edges() # + 2 to acount for tag
@@ -94,7 +95,7 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 		last_idx = idx + word.length() - 1
 		
 		if namespace_script != null:
-			if namespace_script.resource_path.begins_with(namespace_dir) and i < words.size() - 1: # existing namespace member
+			if plugin.is_in_namespace_dir(namespace_script.resource_path) and i < words.size() - 1: # existing namespace member
 				_set_hl_info_at_idx(new_hl_info, idx, word, color_existing)
 			else:
 				var current_script = EditorInterface.get_script_editor().get_current_script()

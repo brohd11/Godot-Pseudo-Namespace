@@ -5,14 +5,23 @@ const Dialog = preload("res://addons/addon_lib/brohd/alib_runtime/dialog/dialog.
 const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")
 const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_regex.gd")
 const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
+const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
+const Plugin = preload("res://addons/namespace/plugin.gd") #! ignore-remote
 
 @warning_ignore_start("static_called_on_instance")
 
-const _RES = "res://" 
+const _RES = "res://"
 const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
+## Directories the previous build wrote to. Without this a directory is orphaned
+## the moment its claim is deleted, because nothing left on disk points at it.
+const LAST_DIRS_PROJECT_SETTING = "plugin/namespace/last_output_dirs"
 
 const GENERATED_DIR = "res://namespace_classes/" #! ignore-remote
 const NAMESPACE_TAG = "#! namespace "
+
+## Marks a file as owned by this tool. Deletion and class discovery both key off
+## it, so it must only ever be written by _generate_class_and_subclasses.
+const GENERATED_HEADER = "# This file is auto-generated. Do not edit."
 
 #static var _open_scripts
 
@@ -42,54 +51,205 @@ static func get_generated_dir():
 	var settings = _get_setting_singleton()
 	if settings.has_setting(GEN_DIR_PROJECT_SETTING):
 		generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
-	return generated_dir
+	# Trailing slash matters: without it "res://ns" also prefix matches "res://ns_backup/".
+	return NamespaceConfig.normalize_dir(generated_dir)
+
+
+## Loads config from disk. Not cached: a build always wants fresh data, and the
+## editor side keeps its own cache on the plugin instance.
+static func get_config() -> Dictionary:
+	return NamespaceConfig.load_all(get_generated_dir())
+
+
+static func _get_last_output_dirs() -> Array:
+	var settings = _get_setting_singleton()
+	if not settings.has_setting(LAST_DIRS_PROJECT_SETTING):
+		return []
+	var stored = settings.get_setting(LAST_DIRS_PROJECT_SETTING)
+	if stored == null:
+		return []
+	return Array(stored)
+
+## Records only the directories that actually received output, so the set shrinks
+## as claims go away instead of growing forever.
+static func _store_output_dirs(dirs:Array):
+	var settings = _get_setting_singleton()
+	settings.set_setting(LAST_DIRS_PROJECT_SETTING, PackedStringArray(dirs))
+	if settings == ProjectSettings:
+		ProjectSettings.save()
+
+## Every directory the build writes to, including the default. Distinct, sorted,
+## each with a trailing slash. Prefers the plugin's cache; falls back to a fresh
+## load so this script still works run directly as an EditorScript.
+static func get_all_output_dirs() -> Array:
+	var plugin = Plugin.get_instance()
+	if plugin:
+		return plugin.output_dirs
+	return get_config().get("output_dirs", [get_generated_dir()])
+
+static func get_output_dir_for_root(root:String) -> String:
+	return get_config().get("root_dirs", {}).get(root, get_generated_dir())
+
+## Single path convenience. Resolving the directory list costs a plugin lookup,
+## so anything checking many paths should hoist get_all_output_dirs() out of its
+## loop and use _path_in_dirs directly.
+static func is_in_namespace_dir(path:String) -> bool:
+	return _path_in_dirs(path, get_all_output_dirs())
+
+static func _path_in_dirs(path:String, dirs:Array) -> bool:
+	for dir in dirs:
+		if path.begins_with(dir):
+			return true
+	return false
+
+## True only for files this tool wrote. Output directories can live inside addon
+## folders next to hand written scripts, so deletion must never rely on the
+## extension alone.
+static func _is_generated_file(path:String) -> bool:
+	if path.get_extension() != "gd":
+		return false
+	var file = FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return false
+	var first_line = file.get_line()
+	file.close()
+	return first_line == GENERATED_HEADER
 
 func _run() -> void:
 	build_files()
 
 static func build_files():
-	var generated_dir = GENERATED_DIR
 	var settings = _get_setting_singleton()
 	if not settings.has_setting(GEN_DIR_PROJECT_SETTING):
 		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
-	
-	generated_dir = settings.get_setting(GEN_DIR_PROJECT_SETTING)
+
+	var generated_dir = get_generated_dir()
 	var confirmed = await Dialog.confirm("Ensure all files are saved before running build.")
 	if not confirmed:
 		return
-	
+
 	print("Starting namespace file generation...")
-	var namespace_references = _get_used_namespace_references()
-	
+
+	var config = get_config()
+	_report_config(config)
+
+	var namespace_references = _get_used_namespace_references(config.get("output_dirs", []))
+
 	var namespace_data = _scan_and_parse_namespaces()
 	if namespace_data is bool:
 		print("Aborting, fix namespace collisions.")
 		return
-	
+
+	_warn_unproduced_roots(config, namespace_data)
+
+	var dir_to_roots = _map_roots_to_dirs(config, namespace_data, generated_dir)
+	var all_dirs = _get_dirs_to_clear(config, dir_to_roots, generated_dir)
+
 	if namespace_data.is_empty():
-		_clear_directory(generated_dir)
-		_clean_up_uids(generated_dir)
+		for dir in all_dirs:
+			_clear_directory(dir)
+		_store_output_dirs([])
+		for dir in all_dirs:
+			_clean_up_uids(dir)
+		refresh_plugin_cache()
 		EditorInterface.get_resource_filesystem().scan()
 		print("No namespace tags found. Nothing to generate.")
 		return
-	
+
 	var valid = await _compare_namespace_data(namespace_references, namespace_data)
 	if not valid:
 		print("Aborting namespace generation.")
 		return
-	
-	_clear_directory(generated_dir)
-	
+
+	# Clear every directory before generating into any of them. Two roots can
+	# share an output directory, so clearing per root would wipe the first one.
+	for dir in all_dirs:
+		_clear_directory(dir)
+
 	#_generate_namespace_files(namespace_data, generated_dir) #^ for inner class style
-	_generate_namespace_file_with_dir(namespace_data, generated_dir)
-	
+	for dir in all_dirs:
+		if not dir_to_roots.has(dir):
+			continue
+		var roots = dir_to_roots[dir]
+		roots.sort() # write order decides which side a name collision reports
+		_generate_namespace_file_with_dir(namespace_data, dir, roots)
+
 	print("Namespace file generation complete.")
-	_clean_up_uids(generated_dir)
+
+	var dirs_with_output = dir_to_roots.keys()
+	dirs_with_output.sort()
+	_store_output_dirs(dirs_with_output)
+
+	for dir in all_dirs:
+		_clean_up_uids(dir)
+
+	# Highlighting and completion query straight after a build. Refreshed before
+	# the rescan on purpose: the cache is built by reading the files we just
+	# wrote, so it does not have to wait for the (asynchronous) scan.
+	refresh_plugin_cache()
 	EditorInterface.get_resource_filesystem().scan()
 
 
-static func _get_used_namespace_references():
-	var namespace_dir = get_generated_dir()
+## No-op when the plugin is not running, e.g. this script run as an EditorScript.
+static func refresh_plugin_cache():
+	var plugin = Plugin.get_instance()
+	if plugin:
+		plugin.refresh_cache()
+
+
+## Groups the roots found in the tags by the directory they build into.
+static func _map_roots_to_dirs(config:Dictionary, namespace_data:Dictionary, default_dir:String) -> Dictionary:
+	var root_dirs = config.get("root_dirs", {})
+	var dir_to_roots = {}
+	for root in namespace_data.keys():
+		var dir = root_dirs.get(root, default_dir)
+		if not dir_to_roots.has(dir):
+			dir_to_roots[dir] = []
+		dir_to_roots[dir].append(root)
+	return dir_to_roots
+
+
+## Every directory that could hold output from a previous build: the ones named
+## by config (even if their claims lost a clash), the ones the previous build
+## wrote to, the ones this build writes to, and the default. The default must be
+## included even when nothing resolves to it, otherwise a root that just moved
+## into a claimed directory leaves its old files behind. The previous build's
+## directories cover the case where a whole [namespace] section was deleted, as
+## nothing on disk points at that directory any more.
+static func _get_dirs_to_clear(config:Dictionary, dir_to_roots:Dictionary, default_dir:String) -> Array:
+	var clear_set = {default_dir: true}
+	for dir in config.get("output_dirs", []):
+		clear_set[dir] = true
+	for dir in _get_last_output_dirs():
+		clear_set[NamespaceConfig.normalize_dir(dir)] = true
+	for dir in dir_to_roots.keys():
+		clear_set[dir] = true
+	var dirs = clear_set.keys()
+	dirs.sort()
+	return dirs
+
+
+static func _report_config(config:Dictionary):
+	for error in config.get("errors", []):
+		printerr("Namespace config - %s" % error)
+
+	for clash in config.get("clashes", []):
+		var message = "[color=fedd66]Namespace claim clash for '%s': using %s, ignoring %s[/color]"
+		print_rich(message % [clash.get("root"), clash.get("winner"), clash.get("loser")])
+
+
+static func _warn_unproduced_roots(config:Dictionary, namespace_data:Dictionary):
+	var sources = config.get("sources", {})
+	for root in config.get("root_dirs", {}).keys():
+		if namespace_data.has(root):
+			continue
+		var message = "[color=fedd66]'%s' is claimed by %s but no namespace tag produces it.[/color]"
+		print_rich(message % [root, sources.get(root, "?")])
+
+
+static func _get_used_namespace_references(output_dirs:Array=[]):
+	if output_dirs.is_empty():
+		output_dirs = get_all_output_dirs()
 	var namespace_references = {}
 	var namespace_classes = get_namespace_classes()
 	if namespace_classes.is_empty():
@@ -104,7 +264,7 @@ static func _get_used_namespace_references():
 	
 	var files = UFile.scan_for_files(_RES, ["gd"])
 	for file_path in files:
-		if file_path.begins_with(namespace_dir):
+		if _path_in_dirs(file_path, output_dirs):
 			continue
 		var file_access = FileAccess.open(file_path, FileAccess.READ)
 		var file_path_data = {}
@@ -213,27 +373,35 @@ static func _get_all_files(namespace_data, file_array, first_level=true):
 			file_array.append(value)
 
 
+## Removes only files carrying GENERATED_HEADER. Output directories may sit
+## inside an addon alongside its own scripts, so anything else is left alone.
+## .uid files are preserved here and reconciled in _clean_up_uids.
 static func _clear_directory(directory: String):
 	var dir_arrays = UFile.scan_for_dirs(directory, true)
 	for array in dir_arrays:
 		array.reverse()
 		for dir in array:
 			var dir_access = DirAccess.open(dir)
+			if not dir_access:
+				continue
 			var files = dir_access.get_files()
 			for f in files:
-				if f.get_extension() == "uid":
-					continue
 				var file_path = dir.path_join(f)
+				if not _is_generated_file(file_path):
+					continue
 				DirAccess.remove_absolute(file_path)
-	
+
 	if not DirAccess.dir_exists_absolute(directory):
 		return
 	var dir_access = DirAccess.open(directory)
+	if not dir_access:
+		printerr("Could not open output directory: ", directory)
+		return
 	var files = dir_access.get_files()
 	for file in files:
-		if file.get_extension() == "uid":
-			continue
 		var file_path = directory.path_join(file)
+		if not _is_generated_file(file_path):
+			continue
 		DirAccess.remove_absolute(file_path)
 	
 	
@@ -262,6 +430,10 @@ static func _clean_up_uids(directory: String):
 		array.reverse()
 		for dir in array:
 			var dir_access = DirAccess.open(dir)
+			if not dir_access:
+				continue
+			# Without this a directory holding only dotfiles reads as empty below.
+			dir_access.include_hidden = true
 			var files = dir_access.get_files()
 			for f in files:
 				if f.get_extension() != "uid":
@@ -270,12 +442,16 @@ static func _clean_up_uids(directory: String):
 				if FileAccess.file_exists(file_path.get_basename()):
 					continue
 				DirAccess.remove_absolute(file_path)
-			
+
 			files = dir_access.get_files()
 			if files.is_empty():
 				DirAccess.remove_absolute(dir)
-		
+
 	var dir_access = DirAccess.open(directory)
+	if not dir_access:
+		printerr("Could not open output directory: ", directory)
+		return
+	dir_access.include_hidden = true
 	var files = dir_access.get_files()
 	for file in files:
 		if file.get_extension() != "uid":
@@ -328,22 +504,29 @@ static func _scan_and_parse_namespaces() -> Variant:
 
 #region MULTI FILE NAMESPACE
 
-# Main entry point. Iterates through the top-level keys in the data.
-static func _generate_namespace_file_with_dir(data: Dictionary, generated_dir: String):
+# Main entry point. Generates the given roots into one directory.
+# Roots are passed explicitly because a build may split them across directories;
+# an empty array means "every root in data".
+static func _generate_namespace_file_with_dir(data: Dictionary, generated_dir: String, roots:Array=[]):
 	DirAccess.make_dir_recursive_absolute(generated_dir)
-	for top_level_class_name in data.keys():
+	if roots.is_empty():
+		roots = data.keys()
+		roots.sort()
+	for top_level_class_name in roots:
 		var sub_data = data[top_level_class_name]
-		_generate_class_and_subclasses(top_level_class_name, sub_data, generated_dir, generated_dir)
+		_generate_class_and_subclasses(top_level_class_name, sub_data, generated_dir, generated_dir, true)
 
 
-static func _generate_class_and_subclasses(_class_name: String, data: Dictionary, parent_dir_path: String, generated_dir):
+static func _generate_class_and_subclasses(_class_name: String, data: Dictionary, parent_dir_path: String, generated_dir, is_root:=false):
 	var file_name = _class_name.to_snake_case() + ".gd"
 	var file_path = parent_dir_path.path_join(file_name)
-	
+
 	var child_dir_path = parent_dir_path.path_join(_class_name.to_snake_case())
-	
-	var file_content = "# This file is auto-generated. Do not edit.\n\n"
-	if parent_dir_path == generated_dir:
+
+	var file_content = GENERATED_HEADER + "\n\n"
+	# Explicit flag rather than comparing paths: output dirs now come from user
+	# authored config and pass through simplify_path/path_join on the way here.
+	if is_root:
 		file_content += "class_name %s\n\n" % _class_name # "" <- parser
 	
 	var sorted_keys = data.keys()
@@ -412,7 +595,7 @@ static func _generate_class_and_subclasses(_class_name: String, data: Dictionary
 
 static func _generate_namespace_files(data: Dictionary, generated_dir):
 	for top_level_namespace in data.keys():
-		var file_content = "# This file is auto-generated. Do not edit.\n\n"
+		var file_content = GENERATED_HEADER + "\n\n"
 		file_content += "class_name %s\n\n" % top_level_namespace
 		
 		var sub_data = data[top_level_namespace]
@@ -505,25 +688,54 @@ static func get_namespace_string_parts(original_line_text:String, clean_parts:=t
 	return parts
 
 
+## Prefers the plugin's cache. Falls back to reading from disk so this still
+## works with the plugin disabled.
 static func get_namespace_classes() -> Dictionary:
-	var namespace_dir = get_generated_dir()
-	
-	var namespace_files = []
-	if DirAccess.dir_exists_absolute(namespace_dir):
-		var files = DirAccess.get_files_at(namespace_dir)
-		for f in files:
+	var plugin = Plugin.get_instance()
+	if plugin:
+		return plugin.namespace_classes
+	return build_namespace_classes(get_all_output_dirs())
+
+
+## Top level of every output directory. Reads class_name straight out of the
+## files rather than filtering ProjectSettings.get_global_class_list(), because
+## the rescan after a build is asynchronous and would not yet list a root that
+## was just generated. These are files we wrote, so their header and class_name
+## are authoritative the moment generation finishes.
+static func build_namespace_classes(output_dirs:Array) -> Dictionary:
+	var namespace_classes = {}
+	for namespace_dir in output_dirs:
+		if not DirAccess.dir_exists_absolute(namespace_dir):
+			continue
+		for f in DirAccess.get_files_at(namespace_dir):
 			var path = namespace_dir.path_join(f)
-			namespace_files.append(path)
-	
-	var valid_global_classes = {}
-	var class_data = ProjectSettings.get_global_class_list()
-	for dict in class_data:
-		var path = dict.get("path")
-		if path in namespace_files:
-			var name = dict.get("class")
-			valid_global_classes[name] = path
-	
-	return valid_global_classes
+			if not _is_generated_file(path):
+				continue
+			var _class_name = _read_generated_class_name(path)
+			if not _class_name.is_empty():
+				namespace_classes[_class_name] = path
+
+	return namespace_classes
+
+
+## Sub namespace files are plain scripts, so a missing class_name just means this
+## is not a root and the file is skipped.
+static func _read_generated_class_name(path:String) -> String:
+	var file = FileAccess.open(path, FileAccess.READ)
+	if not file:
+		return ""
+	var found = ""
+	# The declaration sits right after the header, but a few lines of slack keeps
+	# this from breaking if the generated preamble ever grows.
+	for i in range(5):
+		if file.eof_reached():
+			break
+		var line = file.get_line().strip_edges()
+		if line.begins_with("class_name "):
+			found = line.trim_prefix("class_name ").strip_edges()
+			break
+	file.close()
+	return found
 
 static func get_namespace_class_maps():
 	var namespace_classes = get_namespace_classes()

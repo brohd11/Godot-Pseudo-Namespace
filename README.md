@@ -77,7 +77,30 @@ The console can be found in the output tab:
 <img width="1026" height="284" alt="NamespaceEditorConsoleedit" src="https://github.com/user-attachments/assets/692597fb-8110-495a-b4f5-bd683e124aec" />
 
 
-"res://" will be added to the front if you use a relative path. This directory will be completely erased everytime you run the build, so don't place anything inside, or make changes you need preserved.
+"res://" will be added to the front if you use a relative path. Every generated file in this directory is erased and rewritten each build. Files this plugin did not write are left alone, but don't rely on that for anything you care about.
+
+### Building elsewhere
+
+A library that ships namespace tags would normally dump its generated files into whatever central directory the person downloading it happens to use. To keep a library self contained, it can claim its own class names and say where they should be built.
+
+Add a `[namespace]` section to the library's `plugin.cfg` or `version.cfg`. If it has neither, create a `namespace.cfg` instead. All three are read the same way:
+
+```ini
+[namespace]
+path="ns"
+classes=["MyLib", "MyLibEditor"]
+```
+
+- `path` is relative to the config file, so this builds into `addons/my_lib/ns/`. It is optional and defaults to `namespace`. An absolute `res://` path also works. Paths that escape the project are rejected.
+- `classes` lists **top level** names only, the ones that become a `class_name`. Claiming a name takes its whole tree with it, so `MyLib` also covers `MyLib.Utils.Whatever`.
+
+Claims are global. The config's location decides only where the files go, not which scripts it applies to. Every `#! namespace MyLib...` tag in the project builds into that directory no matter where the script lives.
+
+Anything not claimed goes to the default directory as before, so a project with no `[namespace]` section behaves exactly as it always has.
+
+If two configs claim the same name the first one wins, ordered by path, and the clash is reported. Run `namespace config` to see what is claimed, where it builds, and which file claimed it.
+
+Note that a `.gdignore`d folder is skipped entirely, so a config placed inside one will not be found.
 
 Now you can run the build process by either running the EditorScript "namespace_builder.gd",
 or from the console:
@@ -96,7 +119,7 @@ Alternatively, you can use my [Plugin Exporter](https://github.com/brohd11/Godot
 
 The plugin includes 2 sub plugins, EditorConsole and SyntaxPlus.
 
-The console provides a quick way to build and set the directory without having to run the script as an EditorScript or going into ProjectSettings.
+The console provides a quick way to build and set the directory without having to run the script as an EditorScript or going into ProjectSettings. `namespace config` lists any classes redirected by a `[namespace]` section, and `namespace config --files` shows every config file that was found.
 
 SyntaxPlus will provide highlighting for the namespace declaration, telling you if a new space is being created, if there is a conflict or if you are shadowing a global class. This highlighter is the basic GDScript highlighter with some extra rules on top such as highlighting CONSTANTS and PascalCase variables. These can be disabled individually if you just want the vanilla highlighter. You can also set it as the default highlighter in EditorSettings, then you don't need to select it each time.
 

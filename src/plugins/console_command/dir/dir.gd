@@ -33,7 +33,11 @@ func _get_target_positional_count() -> int:
 func _execute(ctx:CompletionContext):
 	if not set_flag:
 		print(NamespaceBuilder.get_generated_dir())
+		var root_dirs = NamespaceBuilder.get_config().get("root_dirs", {})
+		if not root_dirs.is_empty():
+			print("%s class(es) redirected by config, see 'namespace config'" % root_dirs.size())
 	else:
 		var new_dir = positional_args[0]
 		NamespaceBuilder.set_generated_dir(new_dir)
+		NamespaceBuilder.refresh_plugin_cache() # the default dir is part of the cache
 	return ExitCode.OK

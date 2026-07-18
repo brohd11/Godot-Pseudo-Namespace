@@ -2,6 +2,10 @@ extends EditorCodeCompletion
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 
+## Set by plugin.gd right after this is constructed. Holds the namespace cache,
+## so completion never has to look the plugin up while the user is typing.
+var plugin
+
 func _singleton_ready():
 	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)
 
@@ -30,8 +34,8 @@ func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 
 #region Declaration/Assignment
 
-static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
-	var namespace_classes = NamespaceBuilder.get_namespace_classes()
+func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
+	var namespace_classes = plugin.namespace_classes
 	var icon = _get_icon("Script")
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 2:
@@ -45,23 +49,23 @@ static func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
 	return _get_namespace_code_completions(text_ed, current_line_text, true)
 
 
-static func _get_extended_class(text_ed:CodeEdit, current_line_text:String):
+func _get_extended_class(text_ed:CodeEdit, current_line_text:String):
 	var stripped_text:String = current_line_text.get_slice("extends ", 1).strip_edges() # "" <- parser
 	return _get_namespace_code_completions(text_ed, stripped_text)
 
-static func _assignment(text_ed:CodeEdit, current_line_text:String):
+func _assignment(text_ed:CodeEdit, current_line_text:String):
 	var stripped_text:String = current_line_text.get_slice("=", 1).strip_edges() # "" <- parser
 	return _get_namespace_code_completions(text_ed, stripped_text)
 
 
-static func _get_namespace_code_completions(text_ed, current_line_text, show_scripts = true):
+func _get_namespace_code_completions(text_ed, current_line_text, show_scripts = true):
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text, false)
 	if words.size() == 0:
 		return false
 	
 	var first_word = words[0]
 	words.remove_at(0)
-	var namespace_classes = NamespaceBuilder.get_namespace_classes()
+	var namespace_classes = plugin.namespace_classes
 	if not namespace_classes.has(first_word):
 		return false
 	
@@ -73,8 +77,7 @@ static func _get_namespace_code_completions(text_ed, current_line_text, show_scr
 		return true
 	return false
 
-static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array, show_external:=false):
-	var namespace_dir = NamespaceBuilder.get_generated_dir()
+func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array, show_external:=false):
 	var namespace_script:Script = load(namespace_path)
 	if not namespace_script:
 		return false
@@ -85,7 +88,7 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 		var next_script = NamespaceBuilder.class_name_in_script(word, current_script)
 		idx += 1
 		if next_script and next_script is GDScript:
-			if not show_external and not next_script.resource_path.begins_with(namespace_dir):
+			if not show_external and not plugin.is_in_namespace_dir(next_script.resource_path):
 				break # if not showing external, don't list options from external
 			
 			current_script = next_script
@@ -99,7 +102,7 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 		return
 	
 	var constants = current_script.get_script_constant_map()
-	if not current_script.resource_path.begins_with(namespace_dir):
+	if not plugin.is_in_namespace_dir(current_script.resource_path):
 		return false # if current script is outside, don't want to overide completions
 	
 	var added_options = []
@@ -110,7 +113,7 @@ static func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array,
 			continue
 		
 		var script_path = script.resource_path
-		if not script_path.begins_with(namespace_dir):
+		if not plugin.is_in_namespace_dir(script_path):
 			if not show_external:
 				continue
 			else:
