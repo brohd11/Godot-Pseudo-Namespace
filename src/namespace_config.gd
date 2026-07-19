@@ -24,10 +24,6 @@ const LEGACY_CLASSES_KEY = "classes"
 ## Output dir used when a section declares no path.
 const DEFAULT_PATH = "namespace"
 
-## Full paths, not basenames: _scan_for_files compares against dir.path_join(d).
-## Required, not an optimization, since the scan runs with include_hidden.
-const SKIP_DIRS = ["res://.godot", "res://.git"]
-
 
 static func normalize_dir(path:String) -> String:
 	var normalized = path.simplify_path()
@@ -60,7 +56,10 @@ static func has_fatal(errors:Array) -> bool:
 ## the config paths alone.
 static func find_config_files(root:=_RES) -> Array:
 	var config_files = []
-	var files = UFile.scan_for_files_no_fs(root, ["cfg"], false, SKIP_DIRS)
+	var search = UFile.GetFiles.open(root)
+	search.file_extensions = ["cfg"]
+	search.ignore_dir_names = ".git"
+	var files = search.get_files()
 	for path in files:
 		if path.get_file() in CONFIG_NAMES:
 			config_files.append(path)
