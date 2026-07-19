@@ -329,8 +329,7 @@ static func _get_used_namespace_references(output_dirs:Array=[]):
 	_namespace_regex.compile(pattern)
 	
 	var string_regex = URegex.get_strings()
-	
-	var files = UFile.scan_for_files(_RES, ["gd"])
+	var files = UFile.GetFiles.scan(_RES, ["gd"])
 	for file_path in files:
 		if _path_in_dirs(file_path, output_dirs):
 			continue
@@ -533,11 +532,6 @@ static func _clean_up_uids(directory: String):
 		if FileAccess.file_exists(file_path.get_basename()):
 			continue
 		DirAccess.remove_absolute(file_path)
-	
-	#var gd_files = UFile.scan_for_files(directory, ["gd"])
-	#for path in gd_files:
-		#var file_access = FileAccess.open(path, FileAccess.READ)
-		#while not 
 
 
 ## generated_files_out collects every file carrying GENERATED_HEADER. Free to
@@ -548,7 +542,7 @@ static func _clean_up_uids(directory: String):
 static func _scan_and_parse_namespaces(generated_files_out:Array=[], root_sources_out:Dictionary={}) -> Variant:
 	var lines_to_check = 10
 	var data = {}
-	var all_files = UFile.scan_for_files(_RES, ["gd"])
+	var all_files = UFile.GetFiles.scan(_RES, ["gd"])
 	for file_path in all_files:
 		var file = FileAccess.open(file_path, FileAccess.READ)
 		if not file:

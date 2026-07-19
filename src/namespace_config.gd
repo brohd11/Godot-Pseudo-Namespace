@@ -58,7 +58,7 @@ static func find_config_files(root:=_RES) -> Array:
 	var config_files = []
 	var search = UFile.GetFiles.open(root)
 	search.file_extensions = ["cfg"]
-	search.ignore_dir_names = ".git"
+	search.ignore_dir_names = [".git"]
 	var files = search.get_files()
 	for path in files:
 		if path.get_file() in CONFIG_NAMES:
