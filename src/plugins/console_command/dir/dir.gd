@@ -33,9 +33,10 @@ func _get_target_positional_count() -> int:
 func _execute(ctx:CompletionContext):
 	if not set_flag:
 		print(NamespaceBuilder.get_generated_dir())
-		var root_dirs = NamespaceBuilder.get_config().get("root_dirs", {})
-		if not root_dirs.is_empty():
-			print("%s class(es) redirected by config, see 'namespace config'" % root_dirs.size())
+		# Deliberately not resolving claims here, that needs a full tag scan.
+		var configs = NamespaceBuilder.get_config().get("configs", [])
+		if not configs.is_empty():
+			print("%s config(s) declare a namespace section, see 'namespace config'" % configs.size())
 	else:
 		var new_dir = positional_args[0]
 		NamespaceBuilder.set_generated_dir(new_dir)

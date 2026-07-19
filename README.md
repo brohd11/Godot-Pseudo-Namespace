@@ -88,17 +88,28 @@ Add a `[namespace]` section to the library's `plugin.cfg` or `version.cfg`. If i
 ```ini
 [namespace]
 path="ns"
-classes=["MyLib", "MyLibEditor"]
 ```
 
-- `path` is relative to the config file, so this builds into `addons/my_lib/ns/`. It is optional and defaults to `namespace`. An absolute `res://` path also works. Paths that escape the project are rejected.
-- `classes` lists **top level** names only, the ones that become a `class_name`. Claiming a name takes its whole tree with it, so `MyLib` also covers `MyLib.Utils.Whatever`.
+That is usually the whole thing. The section claims **every namespace tagged anywhere under its own directory**, so there is no list to keep in step with your scripts. Add a new class with a `#! namespace MyLib.Whatever` tag inside the library and it is picked up on the next build.
 
-Claims are global. The config's location decides only where the files go, not which scripts it applies to. Every `#! namespace MyLib...` tag in the project builds into that directory no matter where the script lives.
+- `path` is relative to the config file, so this builds into `addons/my_lib/ns/`. It is optional and defaults to `namespace`. An absolute `res://` path also works. Paths that escape the project are rejected.
+- Only **top level** names are ever claimed, the ones that become a `class_name`. Claiming a name takes its whole tree with it, so `MyLib` also covers `MyLib.Utils.Whatever`.
+
+A claim is global once made. The directory decides *which* namespaces are claimed, but the whole tree then builds into that one place, including tags for it that live elsewhere in the project.
 
 Anything not claimed goes to the default directory as before, so a project with no `[namespace]` section behaves exactly as it always has.
 
-If two configs claim the same name the first one wins, ordered by path, and the clash is reported. Run `namespace config` to see what is claimed, where it builds, and which file claimed it.
+If you want a namespace tagged inside your directory to be left alone, opt it out:
+
+```ini
+[namespace]
+path="ns"
+exclude=["SharedThing"]
+```
+
+When configs are nested, the nearest one wins, so a submodule keeps its own namespaces even if a parent directory also has a section. An excluded name falls through to the next config up rather than straight to the default, which is how you hand a namespace to a parent.
+
+If a namespace is tagged under two unrelated config directories, that is ambiguous: the first by path wins and the clash is reported. Run `namespace config` to see what is claimed, where it builds, and which config claimed it.
 
 Note that a `.gdignore`d folder is skipped entirely, so a config placed inside one will not be found.
 

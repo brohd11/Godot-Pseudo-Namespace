@@ -12,9 +12,6 @@ const Plugin = preload("res://addons/namespace/plugin.gd") #! ignore-remote
 
 const _RES = "res://"
 const GEN_DIR_PROJECT_SETTING = "plugin/namespace/directory"
-## Directories the previous build wrote to. Without this a directory is orphaned
-## the moment its claim is deleted, because nothing left on disk points at it.
-const LAST_DIRS_PROJECT_SETTING = "plugin/namespace/last_output_dirs"
 
 const GENERATED_DIR = "res://namespace_classes/" #! ignore-remote
 const NAMESPACE_TAG = "#! namespace "
@@ -41,7 +38,13 @@ static func set_generated_dir(new_dir:String):
 	if not new_dir.begins_with(_RES):
 		new_dir = _RES.path_join(new_dir)
 		print("Making path absolute: %s" % new_dir)
-	
+
+	# Refused here as well as in load_all, so the console says so immediately
+	# rather than at the next build.
+	if NamespaceConfig.is_hidden_path(new_dir):
+		printerr("Cannot generate into a hidden directory, Godot does not index those: %s" % new_dir)
+		return
+
 	_get_setting_singleton().set_setting(GEN_DIR_PROJECT_SETTING, new_dir)
 	if _get_setting_singleton() == ProjectSettings:
 		ProjectSettings.save()
@@ -61,22 +64,18 @@ static func get_config() -> Dictionary:
 	return NamespaceConfig.load_all(get_generated_dir())
 
 
-static func _get_last_output_dirs() -> Array:
-	var settings = _get_setting_singleton()
-	if not settings.has_setting(LAST_DIRS_PROJECT_SETTING):
-		return []
-	var stored = settings.get_setting(LAST_DIRS_PROJECT_SETTING)
-	if stored == null:
-		return []
-	return Array(stored)
+## Which root builds where, for diagnostics outside a build. Costs a full tag
+## scan because claims are derived from where the tags live, so this is only for
+## manual commands, never anything on an editor hot path.
+static func resolve_claims_now(config:Dictionary={}) -> Dictionary:
+	if config.is_empty():
+		config = get_config()
+	var root_sources = {}
+	var namespace_data = _scan_and_parse_namespaces([], root_sources)
+	if namespace_data is bool:
+		return {"root_dirs": {}, "sources": {}, "clashes": []}
+	return NamespaceConfig.resolve_claims(config.get("configs", []), root_sources)
 
-## Records only the directories that actually received output, so the set shrinks
-## as claims go away instead of growing forever.
-static func _store_output_dirs(dirs:Array):
-	var settings = _get_setting_singleton()
-	settings.set_setting(LAST_DIRS_PROJECT_SETTING, PackedStringArray(dirs))
-	if settings == ProjectSettings:
-		ProjectSettings.save()
 
 ## Every directory the build writes to, including the default. Distinct, sorted,
 ## each with a trailing slash. Prefers the plugin's cache; falls back to a fresh
@@ -86,9 +85,6 @@ static func get_all_output_dirs() -> Array:
 	if plugin:
 		return plugin.output_dirs
 	return get_config().get("output_dirs", [get_generated_dir()])
-
-static func get_output_dir_for_root(root:String) -> String:
-	return get_config().get("root_dirs", {}).get(root, get_generated_dir())
 
 ## Single path convenience. Resolving the directory list costs a plugin lookup,
 ## so anything checking many paths should hoist get_all_output_dirs() out of its
@@ -131,24 +127,36 @@ static func build_files():
 	print("Starting namespace file generation...")
 
 	var config = get_config()
-	_report_config(config)
+	if not _report_config_errors(config):
+		print("Aborting, fix namespace config errors.")
+		return
 
 	var namespace_references = _get_used_namespace_references(config.get("output_dirs", []))
 
-	var namespace_data = _scan_and_parse_namespaces()
+	var generated_files = []
+	var root_sources = {}
+	var namespace_data = _scan_and_parse_namespaces(generated_files, root_sources)
 	if namespace_data is bool:
 		print("Aborting, fix namespace collisions.")
 		return
 
-	_warn_unproduced_roots(config, namespace_data)
-
-	var dir_to_roots = _map_roots_to_dirs(config, namespace_data, generated_dir)
+	# Claims depend on where the tags live, so this can only run once they are known.
+	var claims = NamespaceConfig.resolve_claims(config.get("configs", []), root_sources)
+	_report_claims(config, claims, root_sources)
+	
+	var dir_to_roots = _map_roots_to_dirs(claims, namespace_data, generated_dir)
 	var all_dirs = _get_dirs_to_clear(config, dir_to_roots, generated_dir)
+
+	# Ahead of the empty-data return below, so removing every tag in the project
+	# still reconciles output left outside the directories we account for.
+	var orphans_resolved = await _confirm_orphans(generated_files, all_dirs)
+	if not orphans_resolved:
+		print("Aborting namespace generation.")
+		return
 
 	if namespace_data.is_empty():
 		for dir in all_dirs:
 			_clear_directory(dir)
-		_store_output_dirs([])
 		for dir in all_dirs:
 			_clean_up_uids(dir)
 		refresh_plugin_cache()
@@ -176,10 +184,6 @@ static func build_files():
 
 	print("Namespace file generation complete.")
 
-	var dirs_with_output = dir_to_roots.keys()
-	dirs_with_output.sort()
-	_store_output_dirs(dirs_with_output)
-
 	for dir in all_dirs:
 		_clean_up_uids(dir)
 
@@ -197,9 +201,69 @@ static func refresh_plugin_cache():
 		plugin.refresh_cache()
 
 
+## Generated files sitting outside every directory this build accounts for. They
+## are output from a configuration that no longer exists: a claim removed, a
+## whole [namespace] section deleted, or a config file moved to a folder that
+## resolves its path elsewhere.
+static func _get_orphan_files(generated_files:Array, all_dirs:Array) -> Array:
+	var orphans = []
+	for path in generated_files:
+		if _path_in_dirs(path, all_dirs):
+			continue
+		orphans.append(path)
+	orphans.sort()
+	return orphans
+
+
+## Same shape as _compare_namespace_data: list what is at stake, then ask.
+## Declining aborts the build so nothing is written.
+static func _confirm_orphans(generated_files:Array, all_dirs:Array) -> bool:
+	var orphans = _get_orphan_files(generated_files, all_dirs)
+	if orphans.is_empty():
+		return true
+
+	print_rich("[color=fedd66]Generated files no longer claimed by any namespace config:[/color]")
+	for path in orphans:
+		print_rich("[color=fe786b]%s[/color]" % path)
+
+	var message = \
+"%s generated file(s) are no longer
+claimed by any namespace config.
+If you have moved their parent config,
+or renamed their output path,
+this is expected, otherwise confirm they are not valid
+
+Delete them? This cannot be undone."
+	var confirmed = await Dialog.confirm(message % orphans.size())
+	if not confirmed:
+		return false
+
+	_delete_orphan_files(orphans)
+	return true
+
+
+static func _delete_orphan_files(orphans:Array):
+	var parent_dirs = {}
+	for path in orphans:
+		DirAccess.remove_absolute(path)
+		var uid_path = path + ".uid"
+		if FileAccess.file_exists(uid_path):
+			DirAccess.remove_absolute(uid_path)
+		parent_dirs[path.get_base_dir()] = true
+
+	# Deepest first, so a nested tree collapses in one pass. remove_absolute
+	# fails harmlessly on a directory that still holds anything else.
+	var dirs = parent_dirs.keys()
+	dirs.sort_custom(func(a, b): return a.count("/") > b.count("/"))
+	for dir in dirs:
+		DirAccess.remove_absolute(dir)
+
+	print("Removed %s orphaned generated file(s)." % orphans.size())
+
+
 ## Groups the roots found in the tags by the directory they build into.
-static func _map_roots_to_dirs(config:Dictionary, namespace_data:Dictionary, default_dir:String) -> Dictionary:
-	var root_dirs = config.get("root_dirs", {})
+static func _map_roots_to_dirs(claims:Dictionary, namespace_data:Dictionary, default_dir:String) -> Dictionary:
+	var root_dirs = claims.get("root_dirs", {})
 	var dir_to_roots = {}
 	for root in namespace_data.keys():
 		var dir = root_dirs.get(root, default_dir)
@@ -209,19 +273,15 @@ static func _map_roots_to_dirs(config:Dictionary, namespace_data:Dictionary, def
 	return dir_to_roots
 
 
-## Every directory that could hold output from a previous build: the ones named
-## by config (even if their claims lost a clash), the ones the previous build
-## wrote to, the ones this build writes to, and the default. The default must be
-## included even when nothing resolves to it, otherwise a root that just moved
-## into a claimed directory leaves its old files behind. The previous build's
-## directories cover the case where a whole [namespace] section was deleted, as
-## nothing on disk points at that directory any more.
+## Every directory this build accounts for: the ones named by config (even if
+## their claims lost a clash), the ones this build writes to, and the default.
+## The default must be included even when nothing resolves to it, otherwise a
+## root that just moved into a claimed directory leaves its old files behind.
+## Anything generated outside this set is an orphan, handled by _confirm_orphans.
 static func _get_dirs_to_clear(config:Dictionary, dir_to_roots:Dictionary, default_dir:String) -> Array:
 	var clear_set = {default_dir: true}
 	for dir in config.get("output_dirs", []):
 		clear_set[dir] = true
-	for dir in _get_last_output_dirs():
-		clear_set[NamespaceConfig.normalize_dir(dir)] = true
 	for dir in dir_to_roots.keys():
 		clear_set[dir] = true
 	var dirs = clear_set.keys()
@@ -229,22 +289,30 @@ static func _get_dirs_to_clear(config:Dictionary, dir_to_roots:Dictionary, defau
 	return dirs
 
 
-static func _report_config(config:Dictionary):
-	for error in config.get("errors", []):
-		printerr("Namespace config - %s" % error)
+## Returns false when anything fatal was found, meaning a config could not be
+## applied as written. Continuing past that would drop its claims to the default
+## directory and let the orphan check offer to delete the output it left behind.
+static func _report_config_errors(config:Dictionary) -> bool:
+	var errors = config.get("errors", [])
+	for error in errors:
+		if error.get("type") == NamespaceConfig.ConfigError.FATAL:
+			printerr("Namespace config - %s" % error.get("text"))
+		else:
+			print_rich("[color=fedd66]Namespace config - %s[/color]" % error.get("text"))
 
-	for clash in config.get("clashes", []):
+	return not NamespaceConfig.has_fatal(errors)
+
+
+## Clashes and unused excludes both depend on the tag scan, so these are reported
+## separately from the parse errors above.
+static func _report_claims(config:Dictionary, claims:Dictionary, root_sources:Dictionary):
+	for clash in claims.get("clashes", []):
 		var message = "[color=fedd66]Namespace claim clash for '%s': using %s, ignoring %s[/color]"
 		print_rich(message % [clash.get("root"), clash.get("winner"), clash.get("loser")])
 
-
-static func _warn_unproduced_roots(config:Dictionary, namespace_data:Dictionary):
-	var sources = config.get("sources", {})
-	for root in config.get("root_dirs", {}).keys():
-		if namespace_data.has(root):
-			continue
-		var message = "[color=fedd66]'%s' is claimed by %s but no namespace tag produces it.[/color]"
-		print_rich(message % [root, sources.get(root, "?")])
+	for unused in NamespaceConfig.get_unused_excludes(config.get("configs", []), root_sources):
+		var message = "[color=fedd66]%s excludes '%s' but nothing under it declares that namespace.[/color]"
+		print_rich(message % [unused.get("path"), unused.get("root")])
 
 
 static func _get_used_namespace_references(output_dirs:Array=[]):
@@ -271,6 +339,11 @@ static func _get_used_namespace_references(output_dirs:Array=[]):
 		var count = 1
 		while not file_access.eof_reached():
 			var line = file_access.get_line()
+			# Generated files outside the output dirs land here, and their own
+			# "class_name X" line matches the reference pattern. Reporting that
+			# would flag the files the orphan check is about to offer to delete.
+			if count == 1 and line == GENERATED_HEADER:
+				break
 			var anon = func(_line):
 				var _matches = _namespace_regex.search_all(_line)
 				for _match in _matches:
@@ -467,20 +540,16 @@ static func _clean_up_uids(directory: String):
 		#while not 
 
 
-static func _scan_and_parse_namespaces() -> Variant:
+## generated_files_out collects every file carrying GENERATED_HEADER. Free to
+## gather here: the first line this already reads looking for the tag is exactly
+## the header check, and _confirm_orphans needs the full project-wide list.
+## root_sources_out maps each top level namespace to the files that tagged it,
+## which is what decides who claims it in NamespaceConfig.resolve_claims.
+static func _scan_and_parse_namespaces(generated_files_out:Array=[], root_sources_out:Dictionary={}) -> Variant:
 	var lines_to_check = 10
 	var data = {}
 	var all_files = UFile.scan_for_files(_RES, ["gd"])
-	#^{[r/] Think this is obsolete
-	#var open_scripts = EditorInterface.get_script_editor().get_open_scripts()
-	#var open_scripts_dict = {}
-	#for script in open_scripts:
-		#var path = script.resource_path
-		#open_scripts_dict[path] = script
-	#var open_script_paths = open_scripts_dict.keys()
-	#^}
 	for file_path in all_files:
-		
 		var file = FileAccess.open(file_path, FileAccess.READ)
 		if not file:
 			printerr("Could not open file: ", file_path)
@@ -488,6 +557,9 @@ static func _scan_and_parse_namespaces() -> Variant:
 		
 		for i in range(lines_to_check):
 			var line = file.get_line()
+			if i == 0 and line == GENERATED_HEADER:
+				generated_files_out.append(file_path) # our own output, never tagged
+				break
 			if line.begins_with(NAMESPACE_TAG):
 				var namespace_string = line.trim_prefix(NAMESPACE_TAG).strip_edges()
 				if not namespace_string.is_empty():
@@ -495,6 +567,12 @@ static func _scan_and_parse_namespaces() -> Variant:
 					#var success = _add_to_namespace_data(data, namespace_string, file_path)
 					if not success:
 						return false
+					var parts = get_namespace_string_parts(line)
+					if not parts.is_empty():
+						var root = parts[0]
+						if not root_sources_out.has(root):
+							root_sources_out[root] = []
+						root_sources_out[root].append(file_path)
 				break
 		
 		file.close()
