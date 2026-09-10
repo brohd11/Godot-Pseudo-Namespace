@@ -2,7 +2,8 @@
 extends EditorScript
 #! remote
 const Dialog = preload("res://addons/addon_lib/brohd/alib_runtime/dialog/dialog.gd")
-const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")
+const UFile = preload("uid://bl33psa06nv1e") #! resolve ALibRuntime.Utils.UFile.Methods
+const GetFiles = preload("uid://b3p6nfmpcltt0") #! resolve ALibRuntime.Utils.UFile.GetFiles
 const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_regex.gd")
 const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
 const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
@@ -329,7 +330,7 @@ static func _get_used_namespace_references(output_dirs:Array=[]):
 	_namespace_regex.compile(pattern)
 	
 	var string_regex = URegex.get_strings()
-	var files = UFile.GetFiles.scan(_RES, ["gd"])
+	var files = GetFiles.scan(_RES, ["gd"])
 	for file_path in files:
 		if _path_in_dirs(file_path, output_dirs):
 			continue
@@ -542,7 +543,7 @@ static func _clean_up_uids(directory: String):
 static func _scan_and_parse_namespaces(generated_files_out:Array=[], root_sources_out:Dictionary={}) -> Variant:
 	var lines_to_check = 10
 	var data = {}
-	var all_files = UFile.GetFiles.scan(_RES, ["gd"])
+	var all_files = GetFiles.scan(_RES, ["gd"])
 	for file_path in all_files:
 		var file = FileAccess.open(file_path, FileAccess.READ)
 		if not file:

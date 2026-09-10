@@ -1,7 +1,8 @@
 @tool
 extends RefCounted
 #! remote
-const UFile = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_file.gd")
+const UFile = preload("uid://bl33psa06nv1e") #! resolve ALibRuntime.Utils.UFile.Methods
+const GetFiles = preload("uid://b3p6nfmpcltt0") #! resolve ALibRuntime.Utils.UFile.GetFiles
 
 @warning_ignore_start("static_called_on_instance")
 
@@ -56,7 +57,7 @@ static func has_fatal(errors:Array) -> bool:
 ## the config paths alone.
 static func find_config_files(root:=_RES) -> Array:
 	var config_files = []
-	var search = UFile.GetFiles.open(root)
+	var search = GetFiles.open(root)
 	search.file_extensions = ["cfg"]
 	search.ignore_dir_names = [".git"]
 	var files = search.get_files()
