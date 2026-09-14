@@ -10,9 +10,11 @@ static func get_command_name() -> String:
 	return "build"
 
 static func get_self_command_data() -> Dictionary:
-	return Options.get_single_option_dict(get_command_name(), {
+	return _command_data({
 		&"help": _HELP
 	})
 
-func _execute(ctx:CompletionContext):
-	NamespaceBuilder.build_files()
+func _execute(ctx:Context):
+	# Holds the console until the confirm dialogs are answered.
+	await NamespaceBuilder.build_files()
+	return ExitCode.OK

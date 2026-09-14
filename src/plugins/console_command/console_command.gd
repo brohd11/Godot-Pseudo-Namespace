@@ -9,6 +9,6 @@ static func get_command_name() -> String:
 	return "namespace"
 
 static func get_self_command_data() -> Dictionary:
-	return Options.get_single_option_dict(get_command_name(), {
+	return _command_data({
 		&"help": _HELP
 	})

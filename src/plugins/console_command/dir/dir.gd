@@ -12,7 +12,7 @@ static func get_command_name() -> String:
 	return "dir"
 
 static func get_self_command_data() -> Dictionary:
-	return Options.get_single_option_dict(get_command_name(), {
+	return _command_data({
 		&"help": _HELP
 	})
 
@@ -30,13 +30,13 @@ func _get_target_positional_count() -> int:
 		return 1
 	return 0
 
-func _execute(ctx:CompletionContext):
+func _execute(ctx:Context):
 	if not set_flag:
-		print(NamespaceBuilder.get_generated_dir())
+		ctx.append_output(NamespaceBuilder.get_generated_dir())
 		# Deliberately not resolving claims here, that needs a full tag scan.
 		var configs = NamespaceBuilder.get_config().get("configs", [])
 		if not configs.is_empty():
-			print("%s config(s) declare a namespace section, see 'namespace config'" % configs.size())
+			ctx.append_output("%s config(s) declare a namespace section, see 'namespace config'" % configs.size())
 	else:
 		var new_dir = positional_args[0]
 		NamespaceBuilder.set_generated_dir(new_dir)
