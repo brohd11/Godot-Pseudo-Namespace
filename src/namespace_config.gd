@@ -23,7 +23,7 @@ const EXCLUDE_KEY = "exclude"
 const LEGACY_CLASSES_KEY = "classes"
 
 ## Output dir used when a section declares no path.
-const DEFAULT_PATH = "namespace"
+const DEFAULT_PATH = "_ns"
 
 
 static func normalize_dir(path:String) -> String:

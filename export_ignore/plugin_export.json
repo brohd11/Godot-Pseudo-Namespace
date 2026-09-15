@@ -9,7 +9,8 @@
 				"file_extensions": [],
 				"files": []
 			},
-			"export_folder": "namespace{{version=namespace}}/namespace",
+			"export_name": "namespace{{version=namespace}}",
+			"export_folder": "addons/namespace",
 			"other_transfers": [],
 			"parser_overide_settings": {
 				"parse_cs": {
