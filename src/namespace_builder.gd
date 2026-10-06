@@ -1,11 +1,11 @@
 @tool
 extends EditorScript
 #! remote
-const Dialog = preload("res://addons/addon_lib/brohd/alib_runtime/dialog/dialog.gd")
+const Dialog = preload("res://addons/_lib/brohd/alib_runtime/dialog/dialog.gd")
 const UFile = preload("uid://bl33psa06nv1e") #! resolve ALibRuntime.Utils.UFile.Methods
 const GetFiles = preload("uid://b3p6nfmpcltt0") #! resolve ALibRuntime.Utils.UFile.GetFiles
-const URegex = preload("res://addons/addon_lib/brohd/alib_runtime/utils/u_regex.gd")
-const UClassDetail = preload("res://addons/addon_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
+const URegex = preload("res://addons/_lib/brohd/alib_runtime/utils/u_regex.gd")
+const UClassDetail = preload("res://addons/_lib/brohd/alib_editor/utils/src/u_class_detail.gd")
 const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
 const Plugin = preload("res://addons/namespace/plugin.gd") #! ignore-remote
 
