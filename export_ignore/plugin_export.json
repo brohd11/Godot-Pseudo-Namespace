@@ -48,6 +48,6 @@
 		}
 	},
 	"plugin_folder": "Namespace{{version=namespace}}",
-	"post_script": "res://addons/namespace/export_ignore/pre_post_export.gd",
-	"pre_script": "res://addons/namespace/export_ignore/pre_post_export.gd"
+	"post_script": "",
+	"pre_script": ""
 }
