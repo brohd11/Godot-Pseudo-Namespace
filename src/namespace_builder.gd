@@ -1,11 +1,13 @@
 @tool
 extends EditorScript
 #! remote
-const Dialog = preload("res://addons/_lib/brohd/src/alib_runtime/dialog/dialog.gd")
-const UFile = preload("uid://bl33psa06nv1e") #! resolve ALibRuntime.Utils.UFile.Methods
-const GetFiles = preload("uid://b3p6nfmpcltt0") #! resolve ALibRuntime.Utils.UFile.GetFiles
-const URegex = preload("res://addons/_lib/brohd/src/alib_runtime/utils/u_regex.gd")
-const UClassDetail = preload("res://addons/_lib/brohd/src/alib_editor/utils/src/u_class_detail.gd")
+
+const Confirmation = preload("uid://dwhlbgevd62gg") #! resolve Dialogs.Handlers.Confirmation
+const UFile = preload("uid://bqfy5cvhth0m1") #! resolve UtilR.Files.UFile
+const GetFiles = preload("uid://2kt1rv8kqr3u") #! resolve UtilR.Files.GetFiles
+const URegex = preload("uid://d0rbf4as6kpns") #! resolve UtilR.Strings.URegex
+const UClassDetail = preload("uid://0a4i0eyxcij7") #! resolve UtilR.Objects.UClassDetail
+
 const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
 const Plugin = preload("res://addons/namespace/plugin.gd") #! ignore-remote
 
@@ -121,7 +123,7 @@ static func build_files():
 		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
 
 	var generated_dir = get_generated_dir()
-	var confirmed = await Dialog.confirm("Ensure all files are saved before running build.")
+	var confirmed = await Confirmation.confirm("Ensure all files are saved before running build.")
 	if not confirmed:
 		return
 
@@ -235,7 +237,7 @@ or renamed their output path,
 this is expected, otherwise confirm they are not valid
 
 Delete them? This cannot be undone."
-	var confirmed = await Dialog.confirm(message % orphans.size())
+	var confirmed = await Confirmation.confirm(message % orphans.size())
 	if not confirmed:
 		return false
 
@@ -398,7 +400,7 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			for ref in data.keys():
 				print("\tReference at line %s: %s" % [data.get(ref), ref])
 		
-		var confirmed = await Dialog.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
+		var confirmed = await Confirmation.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
 		if not confirmed:
 			return false
 	

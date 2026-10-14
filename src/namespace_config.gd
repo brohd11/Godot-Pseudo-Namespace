@@ -1,8 +1,8 @@
 @tool
 extends RefCounted
 #! remote
-const UFile = preload("uid://bl33psa06nv1e") #! resolve ALibRuntime.Utils.UFile.Methods
-const GetFiles = preload("uid://b3p6nfmpcltt0") #! resolve ALibRuntime.Utils.UFile.GetFiles
+const UFile = preload("uid://bqfy5cvhth0m1") #! resolve UtilR.Files.UFile
+const GetFiles = preload("uid://2kt1rv8kqr3u") #! resolve UtilR.Files.GetFiles
 
 @warning_ignore_start("static_called_on_instance")
 
@@ -14,7 +14,7 @@ enum ConfigError {
 const _RES = "res://"
 
 ## Files that may carry a [namespace] section. All are treated identically.
-const CONFIG_NAMES = ["plugin.cfg", "version.cfg", "namespace.cfg"]
+const CONFIG_NAMES = ["plugin.cfg", "addon.cfg", "version.cfg", "namespace.cfg"]
 const SECTION = "namespace"
 const PATH_KEY = "path"
 const EXCLUDE_KEY = "exclude"
