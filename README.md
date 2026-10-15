@@ -124,7 +124,7 @@ When accessing the namespace class, there is a code completion plugin that will 
 
 Because you access this as a global class, you could move these files wherever needed without issues. For example into a plugin for a release package. You would move the top level namespace file needed and the folder of the same name.
 
-Alternatively, you can use my [Plugin Exporter](https://github.com/brohd11/Godot-Plugin-Exporter) to keep them in a central spot and package them in with your plugin on export. This is handy for utilities or modules you use in multiple projects.
+Alternatively, you can use my [Package Exporter](https://github.com/brohd11/godot-package-exporter) to keep them in a central spot and package them in with your plugin on export. This is handy for utilities or modules you use in multiple projects.
 
 ### Sub Plugins
 
