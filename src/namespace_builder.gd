@@ -23,7 +23,8 @@ const NAMESPACE_TAG = "#! namespace "
 ## it, so it must only ever be written by _generate_class_and_subclasses.
 const GENERATED_HEADER = "# This file is auto-generated. Do not edit."
 
-#static var _open_scripts
+func _run() -> void:
+	build_files()
 
 
 static func _get_setting_singleton(): ## Editor Settings for now. Possibly need to use ProjectSettings.save()
@@ -114,8 +115,7 @@ static func _is_generated_file(path:String) -> bool:
 	file.close()
 	return first_line == GENERATED_HEADER
 
-func _run() -> void:
-	build_files()
+
 
 static func build_files():
 	var settings = _get_setting_singleton()
