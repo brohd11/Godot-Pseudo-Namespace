@@ -2,7 +2,7 @@ extends EditorConsoleSingleton.CommandBase
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
-const NamespacePlugin = preload("res://addons/namespace/plugin.gd")
+const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
 
 const _HELP = \
 "Show which classes are redirected by [namespace] config sections
@@ -15,7 +15,8 @@ static func get_command_name() -> String:
 
 static func get_self_command_data() -> Dictionary:
 	return _command_data({
-		&"help": _HELP
+		&"help": _HELP,
+		&"positional_count": 0,
 	})
 
 func _get_flags() -> Dictionary:
@@ -23,19 +24,13 @@ func _get_flags() -> Dictionary:
 	options.add_option("--files")
 	return options.get_options()
 
-func _process_flag(flag:String):
-	if flag == "--files":
-		files_flag = true
-
-func _get_target_positional_count() -> int:
-	return 0
 
 func _execute(ctx:Context):
 	var config = NamespaceBuilder.get_config()
 	# Claims come from where the tags live, so this costs a scan. Fine here.
 	var claims = NamespaceBuilder.resolve_claims_now(config)
 	# Doubles as the recache path if the cache is ever out of step.
-	NamespaceBuilder.refresh_plugin_cache()
+	NamespaceBuilder.refresh_cache()
 
 	if files_flag:
 		var config_files = NamespaceConfig.find_config_files()
@@ -62,11 +57,10 @@ func _execute(ctx:Context):
 	for d in output_dirs:
 		ctx.append_output("\t%s" % d)
 
-	var plugin = NamespacePlugin.get_instance()
-	if plugin == null:
-		ctx.append_output("[color=fedd66]Plugin instance not found, cache not refreshed.[/color]")
+	if not NamespaceSingleton.instance_valid():
+		ctx.append_output("[color=fedd66]Namespace singleton not found, cache not refreshed.[/color]")
 	else:
-		var cached = plugin.namespace_classes.keys()
+		var cached = NamespaceSingleton.get_instance().namespace_classes.keys()
 		cached.sort()
 		ctx.append_output("Cached classes (%s): %s" % [cached.size(), ", ".join(cached)])
 

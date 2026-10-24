@@ -1,10 +1,13 @@
 extends EditorCodeCompletion
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
+const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
 
-## Set by plugin.gd right after this is constructed. Holds the namespace cache,
-## so completion never has to look the plugin up while the user is typing.
-var plugin
+## Fetched once, so completion never looks the node up while the user is typing.
+var namespace_singleton
+
+func _init() -> void:
+	namespace_singleton = NamespaceSingleton.get_instance()
 
 func _singleton_ready():
 	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)
@@ -35,7 +38,7 @@ func _on_code_completion_requested(script_editor:CodeEdit) -> bool:
 #region Declaration/Assignment
 
 func _namespace_declaration(text_ed:CodeEdit, current_line_text:String):
-	var namespace_classes = plugin.namespace_classes
+	var namespace_classes = namespace_singleton.namespace_classes
 	var icon = _get_icon("Script")
 	var words = NamespaceBuilder.get_namespace_string_parts(current_line_text)
 	if words.size() < 2:
@@ -65,7 +68,7 @@ func _get_namespace_code_completions(text_ed, current_line_text, show_scripts = 
 	
 	var first_word = words[0]
 	words.remove_at(0)
-	var namespace_classes = plugin.namespace_classes
+	var namespace_classes = namespace_singleton.namespace_classes
 	if not namespace_classes.has(first_word):
 		return false
 	
@@ -88,7 +91,7 @@ func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array, show_e
 		var next_script = NamespaceBuilder.class_name_in_script(word, current_script)
 		idx += 1
 		if next_script and next_script is GDScript:
-			if not show_external and not plugin.is_in_namespace_dir(next_script.resource_path):
+			if not show_external and not namespace_singleton.is_in_namespace_dir(next_script.resource_path):
 				break # if not showing external, don't list options from external
 			
 			current_script = next_script
@@ -102,7 +105,7 @@ func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array, show_e
 		return
 	
 	var constants = current_script.get_script_constant_map()
-	if not plugin.is_in_namespace_dir(current_script.resource_path):
+	if not namespace_singleton.is_in_namespace_dir(current_script.resource_path):
 		return false # if current script is outside, don't want to overide completions
 	
 	var added_options = []
@@ -113,7 +116,7 @@ func _check_scripts(text_ed:CodeEdit, namespace_path:String, words:Array, show_e
 			continue
 		
 		var script_path = script.resource_path
-		if not plugin.is_in_namespace_dir(script_path):
+		if not namespace_singleton.is_in_namespace_dir(script_path):
 			if not show_external:
 				continue
 			else:

@@ -40,5 +40,5 @@ func _execute(ctx:Context):
 	else:
 		var new_dir = positional_args[0]
 		NamespaceBuilder.set_generated_dir(new_dir)
-		NamespaceBuilder.refresh_plugin_cache() # the default dir is part of the cache
+		NamespaceBuilder.refresh_cache() # the default dir is part of the cache
 	return ExitCode.OK

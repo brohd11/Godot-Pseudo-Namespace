@@ -1,5 +1,5 @@
 @tool
-extends EditorScript
+extends RefCounted
 #! remote
 
 const Confirmation = preload("uid://dwhlbgevd62gg") #! resolve Dialogs.Handlers.Confirmation
@@ -7,9 +7,10 @@ const UFile = preload("uid://bqfy5cvhth0m1") #! resolve UtilR.Files.UFile
 const GetFiles = preload("uid://2kt1rv8kqr3u") #! resolve UtilR.Files.GetFiles
 const URegex = preload("uid://d0rbf4as6kpns") #! resolve UtilR.Strings.URegex
 const UClassDetail = preload("uid://0a4i0eyxcij7") #! resolve UtilR.Objects.UClassDetail
+const UEngine = preload("uid://d3ly5y4q2tx57") #! resolve UtilR.UEngine
 
 const NamespaceConfig = preload("res://addons/namespace/src/namespace_config.gd")
-const Plugin = preload("res://addons/namespace/plugin.gd") #! ignore-remote
+const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
 
 @warning_ignore_start("static_called_on_instance")
 
@@ -23,8 +24,13 @@ const NAMESPACE_TAG = "#! namespace "
 ## it, so it must only ever be written by _generate_class_and_subclasses.
 const GENERATED_HEADER = "# This file is auto-generated. Do not edit."
 
-func _run() -> void:
-	build_files()
+## Keys for build_files() answers. A preset answer skips that dialog, which is
+## what lets run_headless.gd build without an editor.
+enum Prompt {
+	SAVE_FILES,
+	DELETE_ORPHANS,
+	BROKEN_REFS,
+}
 
 
 static func _get_setting_singleton(): ## Editor Settings for now. Possibly need to use ProjectSettings.save()
@@ -63,7 +69,7 @@ static func get_generated_dir():
 
 
 ## Loads config from disk. Not cached: a build always wants fresh data, and the
-## editor side keeps its own cache on the plugin instance.
+## editor side keeps its own cache on NamespaceSingleton.
 static func get_config() -> Dictionary:
 	return NamespaceConfig.load_all(get_generated_dir())
 
@@ -82,15 +88,14 @@ static func resolve_claims_now(config:Dictionary={}) -> Dictionary:
 
 
 ## Every directory the build writes to, including the default. Distinct, sorted,
-## each with a trailing slash. Prefers the plugin's cache; falls back to a fresh
-## load so this script still works run directly as an EditorScript.
+## each with a trailing slash. Prefers the singleton's cache; falls back to a
+## fresh load so builds without the plugin running still work.
 static func get_all_output_dirs() -> Array:
-	var plugin = Plugin.get_instance()
-	if plugin:
-		return plugin.output_dirs
+	if NamespaceSingleton.instance_valid():
+		return NamespaceSingleton.get_instance().output_dirs
 	return get_config().get("output_dirs", [get_generated_dir()])
 
-## Single path convenience. Resolving the directory list costs a plugin lookup,
+## Single path convenience. Resolving the directory list costs a singleton lookup,
 ## so anything checking many paths should hoist get_all_output_dirs() out of its
 ## loop and use _path_in_dirs directly.
 static func is_in_namespace_dir(path:String) -> bool:
@@ -117,22 +122,24 @@ static func _is_generated_file(path:String) -> bool:
 
 
 
-static func build_files():
+## answers maps Prompt -> bool. Any prompt without an answer opens a dialog.
+## Returns false when the build aborted, so a CLI caller can exit non-zero.
+static func build_files(answers:Dictionary={}) -> bool:
 	var settings = _get_setting_singleton()
 	if not settings.has_setting(GEN_DIR_PROJECT_SETTING):
 		settings.set_setting(GEN_DIR_PROJECT_SETTING, GENERATED_DIR)
 
 	var generated_dir = get_generated_dir()
-	var confirmed = await Confirmation.confirm("Ensure all files are saved before running build.")
+	var confirmed = await _confirm(answers, Prompt.SAVE_FILES, "Ensure all files are saved before running build.")
 	if not confirmed:
-		return
+		return false
 
 	print("Starting namespace file generation...")
 
 	var config = get_config()
 	if not _report_config_errors(config):
 		print("Aborting, fix namespace config errors.")
-		return
+		return false
 
 	var namespace_references = _get_used_namespace_references(config.get("output_dirs", []))
 
@@ -141,7 +148,7 @@ static func build_files():
 	var namespace_data = _scan_and_parse_namespaces(generated_files, root_sources)
 	if namespace_data is bool:
 		print("Aborting, fix namespace collisions.")
-		return
+		return false
 
 	# Claims depend on where the tags live, so this can only run once they are known.
 	var claims = NamespaceConfig.resolve_claims(config.get("configs", []), root_sources)
@@ -152,25 +159,25 @@ static func build_files():
 
 	# Ahead of the empty-data return below, so removing every tag in the project
 	# still reconciles output left outside the directories we account for.
-	var orphans_resolved = await _confirm_orphans(generated_files, all_dirs)
+	var orphans_resolved = await _confirm_orphans(generated_files, all_dirs, answers)
 	if not orphans_resolved:
 		print("Aborting namespace generation.")
-		return
+		return false
 
 	if namespace_data.is_empty():
 		for dir in all_dirs:
 			_clear_directory(dir)
 		for dir in all_dirs:
 			_clean_up_uids(dir)
-		refresh_plugin_cache()
-		EditorInterface.get_resource_filesystem().scan()
+		refresh_cache()
+		_rescan()
 		print("No namespace tags found. Nothing to generate.")
-		return
+		return true
 
-	var valid = await _compare_namespace_data(namespace_references, namespace_data)
+	var valid = await _compare_namespace_data(namespace_references, namespace_data, answers)
 	if not valid:
 		print("Aborting namespace generation.")
-		return
+		return false
 
 	# Clear every directory before generating into any of them. Two roots can
 	# share an output directory, so clearing per root would wipe the first one.
@@ -193,15 +200,32 @@ static func build_files():
 	# Highlighting and completion query straight after a build. Refreshed before
 	# the rescan on purpose: the cache is built by reading the files we just
 	# wrote, so it does not have to wait for the (asynchronous) scan.
-	refresh_plugin_cache()
-	EditorInterface.get_resource_filesystem().scan()
+	refresh_cache()
+	_rescan()
+	return true
 
 
-## No-op when the plugin is not running, e.g. this script run as an EditorScript.
-static func refresh_plugin_cache():
-	var plugin = Plugin.get_instance()
-	if plugin:
-		plugin.refresh_cache()
+## No-op without the singleton, i.e. when the plugin is not running.
+static func refresh_cache():
+	if not NamespaceSingleton.instance_valid():
+		return
+	var singleton = NamespaceSingleton.get_instance()
+	singleton.output_dirs = get_config().get("output_dirs", [])
+	singleton.namespace_classes = build_namespace_classes(singleton.output_dirs)
+
+
+## Headless there is no filesystem to rescan; the editor picks the files up on
+## its next scan.
+static func _rescan():
+	var editor_interface = UEngine.get_editor_interface()
+	if editor_interface:
+		editor_interface.get_resource_filesystem().scan()
+
+
+static func _confirm(answers:Dictionary, prompt:Prompt, message:String) -> bool:
+	if answers.has(prompt):
+		return answers[prompt]
+	return await Confirmation.confirm(message)
 
 
 ## Generated files sitting outside every directory this build accounts for. They
@@ -220,7 +244,7 @@ static func _get_orphan_files(generated_files:Array, all_dirs:Array) -> Array:
 
 ## Same shape as _compare_namespace_data: list what is at stake, then ask.
 ## Declining aborts the build so nothing is written.
-static func _confirm_orphans(generated_files:Array, all_dirs:Array) -> bool:
+static func _confirm_orphans(generated_files:Array, all_dirs:Array, answers:Dictionary={}) -> bool:
 	var orphans = _get_orphan_files(generated_files, all_dirs)
 	if orphans.is_empty():
 		return true
@@ -237,7 +261,7 @@ or renamed their output path,
 this is expected, otherwise confirm they are not valid
 
 Delete them? This cannot be undone."
-	var confirmed = await Confirmation.confirm(message % orphans.size())
+	var confirmed = await _confirm(answers, Prompt.DELETE_ORPHANS, message % orphans.size())
 	if not confirmed:
 		return false
 
@@ -362,7 +386,7 @@ static func _get_used_namespace_references(output_dirs:Array=[]):
 	
 	return namespace_references
 
-static func _compare_namespace_data(namespace_references, namespace_data):
+static func _compare_namespace_data(namespace_references, namespace_data, answers:Dictionary={}):
 	var scripts_dict = {}
 	
 	for path in namespace_references.keys():
@@ -400,7 +424,7 @@ static func _compare_namespace_data(namespace_references, namespace_data):
 			for ref in data.keys():
 				print("\tReference at line %s: %s" % [data.get(ref), ref])
 		
-		var confirmed = await Confirmation.confirm("Some references will be broken by\nnew namespace generated.\nProceed?")
+		var confirmed = await _confirm(answers, Prompt.BROKEN_REFS, "Some references will be broken by\nnew namespace generated.\nProceed?")
 		if not confirmed:
 			return false
 	
@@ -763,12 +787,11 @@ static func get_namespace_string_parts(original_line_text:String, clean_parts:=t
 	return parts
 
 
-## Prefers the plugin's cache. Falls back to reading from disk so this still
+## Prefers the singleton's cache. Falls back to reading from disk so this still
 ## works with the plugin disabled.
 static func get_namespace_classes() -> Dictionary:
-	var plugin = Plugin.get_instance()
-	if plugin:
-		return plugin.namespace_classes
+	if NamespaceSingleton.instance_valid():
+		return NamespaceSingleton.get_instance().namespace_classes
 	return build_namespace_classes(get_all_output_dirs())
 
 

@@ -1,5 +1,6 @@
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
+const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
 
 const PLUGIN_SETTING = "plugin/namespace/"
 const COLOR_BUILT_IN_CLASH = PLUGIN_SETTING + "color/built_in_clash"
@@ -42,18 +43,26 @@ static func set_colors():
 static func _on_editor_settings_changed():
 	set_colors()
 
-## plugin is supplied by a bind when the callable is registered in plugin.gd, so
-## this stays static while still reaching the cache without a static var.
-static func get_namespace_hl_info(script_editor, current_line_text:String, line:int, comment_tag_idx:int, plugin):
+## Fetched once rather than per line, so highlighting never looks the node up.
+var namespace_singleton
+
+func _init() -> void:
+	namespace_singleton = NamespaceSingleton.get_instance()
+
+func get_namespace_hl_info(script_editor, current_line_text:String, line:int, comment_tag_idx:int):
 	if color_built_in_clash == null:
 		set_colors()
 
-	var namespace_files = plugin.namespace_classes
+	var namespace_files = namespace_singleton.namespace_classes
+	
+	var sp_ins = NamespaceSingleton.get_syntax_plus()
+	if not is_instance_valid(sp_ins):
+		return {}
 
 	var comment_text = current_line_text.substr(comment_tag_idx)
-	var new_hl_info = SyntaxPlusSingleton.HLInfo.highlight_prefix("#!", comment_text)
+	var new_hl_info = sp_ins.HLInfo.highlight_prefix("#!", comment_text)
 	var stripped_text:String = current_line_text.substr(comment_tag_idx + 2).replace(".", " ").strip_edges() # + 2 to acount for tag
-	var gd_hl = SyntaxPlusSingleton.get_single_line_highlight(stripped_text)
+	var gd_hl = sp_ins.get_single_line_highlight(stripped_text)
 	for idx in gd_hl.keys():
 		new_hl_info[idx + 3] = gd_hl[idx]
 	
@@ -95,7 +104,7 @@ static func get_namespace_hl_info(script_editor, current_line_text:String, line:
 		last_idx = idx + word.length() - 1
 		
 		if namespace_script != null:
-			if plugin.is_in_namespace_dir(namespace_script.resource_path) and i < words.size() - 1: # existing namespace member
+			if namespace_singleton.is_in_namespace_dir(namespace_script.resource_path) and i < words.size() - 1: # existing namespace member
 				_set_hl_info_at_idx(new_hl_info, idx, word, color_existing)
 			else:
 				var current_script = EditorInterface.get_script_editor().get_current_script()
@@ -120,12 +129,13 @@ static func _new_namespace_highlighting(comment_text:String, hl_info:Dictionary,
 	return hl_info
 
 static func _set_hl_info_at_idx(hl_info, idx, word, color, force:=false):
-	var symbol_color = SyntaxPlusSingleton.get_instance().symbol_color
+	var sp_ins = NamespaceSingleton.get_syntax_plus()
+	var symbol_color = sp_ins.symbol_color
 	hl_info[idx + word.length()] = {"color": symbol_color}
 	var color_data = hl_info.get(idx)
 	if color_data and not force:
 		var existing_color = color_data.get("color")
-		if existing_color != SyntaxPlusSingleton.get_instance().default_text_color:
+		if existing_color != sp_ins.default_text_color:
 			hl_info[idx] = {"color": color_built_in_clash}
 			return
 	
