@@ -1,4 +1,4 @@
-extends EditorConsoleSingleton.CommandBase # placeholder, swapped by RuntimeExtend
+extends EditorConsoleSingleton.CommandBase #! pe-runtime-extend
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")

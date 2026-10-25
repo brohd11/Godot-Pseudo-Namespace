@@ -1,4 +1,4 @@
-extends EditorCodeCompletion # placeholder, swapped by RuntimeExtend
+extends EditorCodeCompletion #! pe-runtime-extend
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
