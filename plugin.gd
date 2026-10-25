@@ -16,6 +16,7 @@ const SyntaxHighlightingPath = "res://addons/namespace/_export_ignore/plugins/sy
 const PLUGIN_NAME = "Namespace"
 
 var syntax_highlighting
+var console_command_script
 var declaration_code_completion
 
 func _get_plugin_name() -> String:
@@ -53,15 +54,16 @@ func _setup():
 	
 	var ed_console = NamespaceSingleton.get_editor_console()
 	if is_instance_valid(ed_console):
-		var console_cmd = _get_script_instance(ConsoleCommandPath)
-		if is_instance_valid(console_cmd):
+		# Held here: outside the resource cache, so nothing else keeps it or its subcommands alive.
+		console_command_script = NamespaceSingleton.RuntimeExtend.build_from_singleton(ConsoleCommandPath, "EditorConsoleSingleton", "CommandBase")
+		if is_instance_valid(console_command_script):
 			ed_console.register_node(self)
-			ed_console.register_temp_scope("namespace", console_cmd)
+			ed_console.register_temp_scope("namespace", console_command_script)
 	
 	
 	var code_comp = NamespaceSingleton.get_code_completion()
 	if is_instance_valid(code_comp):
-		var dec_code_comp_script = _get_script_instance(DeclarationCodeCompletionPath)
+		var dec_code_comp_script = NamespaceSingleton.RuntimeExtend.build_from_singleton(DeclarationCodeCompletionPath, "EditorCodeCompletionSingleton", "EditorCodeCompletion")
 		if is_instance_valid(dec_code_comp_script):
 			code_comp.register_node(self)
 			declaration_code_completion = dec_code_comp_script.new()

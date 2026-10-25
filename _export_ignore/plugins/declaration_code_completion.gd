@@ -1,4 +1,4 @@
-extends EditorCodeCompletion
+extends EditorCodeCompletion # placeholder, swapped by RuntimeExtend
 
 const NamespaceBuilder = preload("res://addons/namespace/src/namespace_builder.gd")
 const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singleton.gd")
@@ -6,11 +6,9 @@ const NamespaceSingleton = preload("res://addons/namespace/src/namespace_singlet
 ## Fetched once, so completion never looks the node up while the user is typing.
 var namespace_singleton
 
-func _init() -> void:
-	namespace_singleton = NamespaceSingleton.get_instance()
-
 func _singleton_ready():
-	singleton.register_tag("#!", "namespace", EditorCodeCompletionSingleton.TagLocation.START)
+	singleton.register_tag("#!", "namespace", TagLocation.START)
+	namespace_singleton = NamespaceSingleton.get_instance()
 
 func _on_editor_script_changed(script):
 	pass

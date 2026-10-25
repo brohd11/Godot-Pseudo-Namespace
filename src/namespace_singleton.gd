@@ -4,6 +4,9 @@ extends "res://addons/_lib/singleton/src/singleton_base.gd" #! ext Singletons.Ba
 ## or bare EditorScript run never has one and the builder reads from disk instead.
 
 const CheckInstance = preload("uid://cnx1roduh82r") #! resolve Singletons.CheckInstance
+## Re-exported for the hidden plugins: they ship verbatim, so their own preloads
+## must stay inside this plugin while this one gets rewritten on export.
+const RuntimeExtend = preload("uid://d222tctvfbhp2") #! resolve Singletons.RuntimeExtend
 
 const PE_STRIP_CAST_SCRIPT = preload("res://addons/namespace/src/namespace_singleton.gd")
 
